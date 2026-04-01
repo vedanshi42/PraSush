@@ -1,0 +1,7 @@
+pygame
+numpy
+sounddevice
+opencv-python
+pyttsx3
+requests
+faster-whisper
