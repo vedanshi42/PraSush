@@ -1,22 +1,48 @@
 import sys
 import math
 import pygame
+from logger import app_logger
 
 
 class DisplayManager:
-    def __init__(self):
+    def __init__(self, windowed=True):
         pygame.init()
-        self.flags = pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF
-        self.screen = pygame.display.set_mode((0, 0), self.flags)
+        self.windowed = windowed
+        self.fullscreen_mode = False
+        
+        if self.windowed:
+            self.flags = pygame.HWSURFACE | pygame.DOUBLEBUF
+            self.screen = pygame.display.set_mode((1280, 720), self.flags)
+            app_logger.info("Display initialized in windowed mode (1280x720)")
+        else:
+            self.flags = pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF
+            self.screen = pygame.display.set_mode((0, 0), self.flags)
+            self.fullscreen_mode = True
+            app_logger.info("Display initialized in fullscreen mode")
+        
         self.width, self.height = self.screen.get_size()
-        pygame.display.set_caption("PraSush")
+        pygame.display.set_caption("PraSush - Press F for fullscreen, ESC to quit")
         self.font = pygame.font.Font(None, 56)
         self.small_font = pygame.font.Font(None, 32)
+        self.tiny_font = pygame.font.Font(None, 20)
         self.clock = pygame.time.Clock()
         self.subtitle = ""
         self.visible = False
         self.active = False
         self.environment_summary = "Waiting for wake word..."
+
+    def toggle_fullscreen(self):
+        self.fullscreen_mode = not self.fullscreen_mode
+        if self.fullscreen_mode:
+            self.flags = pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF
+            self.screen = pygame.display.set_mode((0, 0), self.flags)
+            app_logger.info("Switched to fullscreen mode")
+        else:
+            self.flags = pygame.HWSURFACE | pygame.DOUBLEBUF
+            self.screen = pygame.display.set_mode((1280, 720), self.flags)
+            app_logger.info("Switched to windowed mode")
+        self.width, self.height = self.screen.get_size()
+        pygame.display.set_caption("PraSush - Press F for fullscreen, ESC to quit")
 
     def set_active(self):
         self.visible = True
@@ -43,7 +69,10 @@ class DisplayManager:
                 self.close()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    app_logger.info("ESC pressed, shutting down")
                     self.close()
+                if event.key == pygame.K_f:
+                    self.toggle_fullscreen()
 
     def render(self):
         self.screen.fill((10, 10, 18))
@@ -53,6 +82,26 @@ class DisplayManager:
             self._draw_subtitle()
         pygame.display.flip()
         self.clock.tick(30)
+
+    def _wrap_text(self, text, max_width, font):
+        """Wrap text to fit within max_width"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
 
     def _draw_avatar(self):
         center_x = self.width // 2
@@ -129,13 +178,31 @@ class DisplayManager:
     def _draw_subtitle(self):
         if not self.subtitle:
             return
-        text_surface = self.small_font.render(self.subtitle, True, (230, 230, 230))
-        text_rect = text_surface.get_rect(center=(self.width // 2, self.height - 80))
-        background = pygame.Surface((text_rect.width + 24, text_rect.height + 18), pygame.SRCALPHA)
-        background.fill((0, 0, 0, 180))
-        background_rect = background.get_rect(center=text_rect.center)
+        
+        # Wrap text to fit on screen with margins
+        max_width = self.width - 100  # 50px margin on each side
+        lines = self._wrap_text(self.subtitle, max_width, self.small_font)
+        
+        # Calculate positions and dimensions
+        line_height = 35  # Height with spacing between lines
+        total_height = len(lines) * line_height - 10
+        
+        # Position in lower part of screen, centered vertically
+        start_y = self.height - 180
+        max_bg_width = max([self.small_font.size(line)[0] for line in lines]) + 24
+        bg_height = total_height + 18
+        
+        # Draw background box
+        background = pygame.Surface((max_bg_width, bg_height), pygame.SRCALPHA)
+        background.fill((0, 0, 0, 200))
+        background_rect = background.get_rect(center=(self.width // 2, start_y + total_height // 2))
         self.screen.blit(background, background_rect)
-        self.screen.blit(text_surface, text_rect)
+        
+        # Draw each line of text
+        for i, line in enumerate(lines):
+            text_surface = self.small_font.render(line, True, (230, 230, 230))
+            text_rect = text_surface.get_rect(center=(self.width // 2, start_y + i * line_height))
+            self.screen.blit(text_surface, text_rect)
 
     def close(self):
         pygame.quit()

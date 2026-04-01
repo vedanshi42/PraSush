@@ -50,7 +50,7 @@ pip install torch
 2. Start Ollama with a compatible model, for example:
 
 ```powershell
-ollama run llama2
+ollama run phi3
 ```
 
 3. Confirm the HTTP API is available at `http://127.0.0.1:11434`.
