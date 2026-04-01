@@ -6,7 +6,7 @@ from vision.camera import CameraInput
 from ui.display import DisplayManager
 from memory.store import MemoryStore
 
-WAKE_KEYWORDS = ["hey prasush", "hey pra sush", "hey prashush"]
+WAKE_KEYWORDS = ["hi", "hey prasush", "hey pra sush", "hey prashush"]
 VISUAL_KEYWORDS = [
     "see",
     "look",

@@ -1,0 +1,22 @@
+[
+  {
+    "role": "assistant",
+    "text": "I am sorry, I could not get a response right now."
+  },
+  {
+    "role": "user",
+    "text": "What do you see?"
+  },
+  {
+    "role": "assistant",
+    "text": "I am sorry, I could not get a response right now."
+  },
+  {
+    "role": "user",
+    "text": "What do you see? Can you see?"
+  },
+  {
+    "role": "assistant",
+    "text": "I am sorry, I could not get a response right now."
+  }
+]
