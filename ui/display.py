@@ -14,14 +14,25 @@ class DisplayManager:
         self.small_font = pygame.font.Font(None, 32)
         self.clock = pygame.time.Clock()
         self.subtitle = ""
+        self.visible = False
         self.active = False
+        self.environment_summary = "Waiting for wake word..."
 
     def set_active(self):
+        self.visible = True
         self.active = True
 
     def set_idle(self):
+        self.visible = True
+        self.active = False
+
+    def hide(self):
+        self.visible = False
         self.active = False
         self.subtitle = ""
+
+    def set_environment_summary(self, text):
+        self.environment_summary = text
 
     def set_subtitle(self, text):
         self.subtitle = text
@@ -35,9 +46,10 @@ class DisplayManager:
                     self.close()
 
     def render(self):
-        self.screen.fill((0, 0, 0))
-        if self.active:
+        self.screen.fill((10, 10, 18))
+        if self.visible:
             self._draw_avatar()
+            self._draw_status()
             self._draw_subtitle()
         pygame.display.flip()
         self.clock.tick(30)
@@ -46,29 +58,73 @@ class DisplayManager:
         center_x = self.width // 2
         center_y = self.height // 2 - 80
         radius = min(self.width, self.height) // 8
-        pulse = int(8 * math.sin(pygame.time.get_ticks() / 250))
-        head_color = (24, 24, 24)
-        glow_color = (80, 80, 220)
+        tick = pygame.time.get_ticks() / 250
+        pulse = int(10 * math.sin(tick))
+        active_level = 255 if self.active else 140
+        glow_alpha = 120 if self.active else 60
+        glow_color = (80, 160, 240)
+        core_color = (28, 35, 80)
+        accent_color = (90, 170, 255)
+        rim_color = (70, 100, 180)
 
-        pygame.draw.circle(self.screen, glow_color, (center_x, center_y), radius + 40, 2)
-        pygame.draw.circle(self.screen, head_color, (center_x, center_y), radius)
-        pygame.draw.circle(self.screen, (50, 50, 120), (center_x - radius - 20, center_y - 10), radius // 2)
-        pygame.draw.circle(self.screen, (50, 50, 120), (center_x + radius + 20, center_y - 10), radius // 2)
+        halo = pygame.Surface((radius * 3, radius * 3), pygame.SRCALPHA)
+        pygame.draw.circle(halo, (60, 100, 220, glow_alpha), (halo.get_width() // 2, halo.get_height() // 2), radius + 60)
+        self.screen.blit(halo, (center_x - halo.get_width() // 2, center_y - halo.get_height() // 2), special_flags=pygame.BLEND_RGBA_ADD)
 
-        eye_y = center_y - radius // 6
-        eye_x_offset = radius // 2
-        pygame.draw.ellipse(self.screen, (245, 245, 245), (center_x - eye_x_offset - 24, eye_y - 18, 48, 36))
-        pygame.draw.ellipse(self.screen, (245, 245, 245), (center_x + eye_x_offset - 24, eye_y - 18, 48, 36))
-        pygame.draw.circle(self.screen, (32, 32, 32), (center_x - eye_x_offset, eye_y), 12 + pulse // 4)
-        pygame.draw.circle(self.screen, (32, 32, 32), (center_x + eye_x_offset, eye_y), 12 + pulse // 4)
+        pygame.draw.circle(self.screen, rim_color, (center_x, center_y), radius + 30, 8)
+        pygame.draw.ellipse(self.screen, core_color, (center_x - radius, center_y - radius, radius * 2, radius * 2 + 24))
+        pygame.draw.ellipse(self.screen, (30, 40, 90), (center_x - radius + 10, center_y - radius + 10, radius * 2 - 20, radius * 2 + 4))
 
-        mouth_width = radius // 2
-        mouth_rect = pygame.Rect(center_x - mouth_width, center_y + radius // 5, 2 * mouth_width, 20)
-        pygame.draw.arc(self.screen, (200, 200, 255), mouth_rect, math.pi / 8, math.pi - math.pi / 8, 4)
+        visor_rect = pygame.Rect(center_x - radius + 8, center_y - radius // 2, radius * 2 - 16, radius // 2)
+        pygame.draw.ellipse(self.screen, (20, 100, 170), visor_rect)
+        pygame.draw.ellipse(self.screen, accent_color, visor_rect.inflate(-12, -10), 2)
 
-        glow_surface = pygame.Surface((radius * 2 + 120, radius * 2 + 120), pygame.SRCALPHA)
-        pygame.draw.circle(glow_surface, (50, 60, 180, 60), (glow_surface.get_width() // 2, glow_surface.get_height() // 2), radius + 50)
-        self.screen.blit(glow_surface, (center_x - glow_surface.get_width() // 2, center_y - glow_surface.get_height() // 2), special_flags=pygame.BLEND_RGBA_ADD)
+        for offset in (-1, 1):
+            eye_center = (center_x + offset * (radius // 2 + 14), center_y - 12)
+            pygame.draw.ellipse(self.screen, (240, 245, 255), (*eye_center, 30, 18))
+            pupil_color = (180, 230, 255) if self.active else (120, 160, 200)
+            pygame.draw.circle(self.screen, pupil_color, eye_center, 9 + (pulse // 8 if self.active else 0))
+            pygame.draw.circle(self.screen, (18, 28, 60), eye_center, 4)
+
+        brow_y = center_y - radius // 2
+        pygame.draw.arc(self.screen, accent_color, (center_x - radius + 20, brow_y - 12, radius * 2 - 40, 32), math.pi, 2 * math.pi, 3)
+
+        mouth_rect = pygame.Rect(center_x - radius // 3, center_y + radius // 4, radius * 2 // 3, 18)
+        smile = (200, 230, 255) if self.active else (120, 160, 190)
+        pygame.draw.arc(self.screen, smile, mouth_rect, math.pi / 10, math.pi - math.pi / 10, 4)
+
+        for angle in range(0, 360, 45):
+            radians = math.radians(angle + pulse)
+            orbit_x = center_x + int(math.cos(radians) * (radius + 90))
+            orbit_y = center_y + int(math.sin(radians) * (radius + 90))
+            dot_color = (120, 190, 255, 200) if self.active else (80, 120, 180, 140)
+            pygame.draw.circle(self.screen, dot_color, (orbit_x, orbit_y), 6)
+
+        for i in range(4):
+            offset = (i - 1.5) * 40
+            pygame.draw.line(
+                self.screen,
+                accent_color,
+                (center_x + offset, center_y + radius + 12),
+                (center_x + offset, center_y + radius + 42),
+                4,
+            )
+
+        core_glow = pygame.Surface((radius * 2 + 80, radius * 2 + 80), pygame.SRCALPHA)
+        pygame.draw.circle(core_glow, (80, 150, 255, 50 if self.active else 25), (core_glow.get_width() // 2, core_glow.get_height() // 2), radius + 40)
+        self.screen.blit(core_glow, (center_x - core_glow.get_width() // 2, center_y - core_glow.get_height() // 2), special_flags=pygame.BLEND_RGBA_ADD)
+
+    def _draw_status(self):
+        status = "AWAKE" if self.active else "IDLE"
+        detail = "Observing environment and learning from signals." if not self.active else "Listening and adapting to your request."
+        status_text = f"{status} • {detail}"
+        text_surface = self.small_font.render(status_text, True, (200, 220, 255))
+        text_rect = text_surface.get_rect(center=(self.width // 2, 80))
+        self.screen.blit(text_surface, text_rect)
+
+        summary_text = self.small_font.render(self.environment_summary, True, (180, 200, 230))
+        summary_rect = summary_text.get_rect(center=(self.width // 2, 120))
+        self.screen.blit(summary_text, summary_rect)
 
     def _draw_subtitle(self):
         if not self.subtitle:

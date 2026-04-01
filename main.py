@@ -26,6 +26,7 @@ VISUAL_KEYWORDS = [
 class PraSushApp:
     def __init__(self):
         self.display = DisplayManager()
+        self.display.hide()
         self.memory = MemoryStore()
         self.voice = VoiceAssistant()
         self.llm = OllamaClient()
@@ -33,11 +34,12 @@ class PraSushApp:
         self.active = False
 
     def run(self):
-        self.display.set_idle()
+        self.display.hide()
         self.display.render()
         try:
             while True:
                 self.display.pump_events()
+                self.display.render()
                 if self.active:
                     self.handle_interaction()
                 else:
@@ -55,6 +57,7 @@ class PraSushApp:
     def handle_interaction(self):
         self.active = False
         self.display.set_active()
+        self.display.set_environment_summary("Ambient awareness is active. Observing room motion, light, and sound.")
         self.display.set_subtitle("I heard you. Please speak your question.")
         self.display.render()
         self.voice.speak("Yes. I am listening.")
@@ -71,6 +74,7 @@ class PraSushApp:
             try:
                 frame, image_path = self.camera.capture_image()
                 visual_prompt = self.camera.describe_frame(frame)
+                self.display.set_environment_summary(visual_prompt)
                 self.display.set_subtitle("Captured an image for your question.")
                 self.display.render()
             except RuntimeError:
