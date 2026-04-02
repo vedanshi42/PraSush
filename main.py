@@ -1,128 +1,170 @@
-import time
-import sys
-from voice.recognizer import VoiceAssistant
-from llm.client import OllamaClient
-from vision.camera import CameraInput
-from ui.display import DisplayManager
-from memory.store import MemoryStore
+from __future__ import annotations
 
-WAKE_KEYWORDS = ["hi", "hey prasush", "hey pra sush", "hey prashush"]
-VISUAL_KEYWORDS = [
-    "see",
-    "look",
-    "camera",
-    "image",
-    "describe",
-    "photo",
-    "picture",
-    "what do you see",
-    "what is in",
-    "what's in",
-    "what am i seeing",
-    "vision",
-]
+import re
+import sys
+import time
+
+from config import USE_VISION, WAKE_VARIANTS, WAKE_WORD
+from llm.client import VisionKeywordRouter, call_llava, call_phi3
+from memory.profile import UserProfileStore
+from memory.store import MemoryStore
+from ui.display import DisplayManager
+from vision.camera import CameraInput
+from voice.recognizer import VoiceAssistant
+
+GREETING_MESSAGE = "Hello, I am PraSush. I am here with you."
+ASK_NAME_MESSAGE = "Before we begin, what should I call you?"
 
 
 class PraSushApp:
-    def __init__(self):
+    def __init__(self) -> None:
         self.display = DisplayManager()
-        self.display.hide()
         self.memory = MemoryStore()
+        self.profile = UserProfileStore()
         self.voice = VoiceAssistant()
-        self.llm = OllamaClient()
         self.camera = CameraInput()
-        self.active = False
+        self.vision_router = VisionKeywordRouter()
 
-    def run(self):
-        self.display.hide()
-        self.display.render()
+    def run(self) -> None:
+        self.display.set_state("idle", "Waiting for wake word", "Say 'Hey PraSush' to begin.")
         try:
             while True:
                 self.display.pump_events()
-                self.display.render()
-                if self.active:
+                wake_text = self.voice.listen_for_wakeword()
+                if wake_text and self.is_wake_match(wake_text):
                     self.handle_interaction()
-                else:
-                    wake_text = self.voice.listen_for_wakeword()
-                    if wake_text and self.contains_wake_word(wake_text):
-                        self.active = True
+                self.display.render()
                 time.sleep(0.1)
         except KeyboardInterrupt:
             self.shutdown()
 
-    def contains_wake_word(self, text: str) -> bool:
-        lowered = text.lower()
-        return any(keyword in lowered for keyword in WAKE_KEYWORDS)
+    def handle_interaction(self) -> None:
+        user_name = self.profile.get_name()
+        greeting = f"Hello {user_name}, I am PraSush. I am here with you." if user_name else GREETING_MESSAGE
+        self.speak_with_presence("greeting", "Wake word detected", greeting)
 
-    def handle_interaction(self):
-        self.active = False
-        self.display.set_active()
-        self.display.set_environment_summary("Ambient awareness is active. Observing room motion, light, and sound.")
-        self.display.set_subtitle("I heard you. Please speak your question.")
-        self.display.render()
-        self.voice.speak("Yes. I am listening.")
+        if not user_name:
+            self.capture_user_name()
+            user_name = self.profile.get_name()
 
+        prompt_text = f"What would you like to know, {user_name}?" if user_name else "What would you like to know?"
+        self.display.set_state("listening", "Listening", prompt_text)
         query = self.voice.record_query()
         if not query:
-            self.display.set_subtitle("I could not hear that. Say Hey PraSush again.")
-            self.voice.speak("I did not catch that. Please say Hey PraSush again.")
+            message = "I could not understand the request."
+            print(f"[ERROR] {message}")
+            self.display.set_state("idle", "Listening timeout", message)
             return
 
-        visual_prompt = None
-        if self.is_visual_request(query):
-            self.voice.speak("I am checking the camera for you.")
+        self.display.set_state("thinking", "Thinking", "Analyzing your request...")
+        try:
+            response = self.answer_query(query)
+        except RuntimeError as exc:
+            response = f"Request failed: {exc}"
+            print(f"[ERROR] {response}")
+            self.display.set_state("idle", "Request failed", response)
+            return
+        self.memory.add_exchange(query, response)
+
+        self.speak_with_presence("speaking", "Speaking", response)
+        self.display.set_state("idle", "Waiting for wake word", "Say 'Hey PraSush' to begin.")
+
+    def answer_query(self, query: str) -> str:
+        prompt = self.build_prompt(query, include_vision=False)
+        if USE_VISION and self.vision_router.is_visual_query(query):
             try:
-                frame, image_path = self.camera.capture_image()
-                visual_prompt = self.camera.describe_frame(frame)
-                self.display.set_environment_summary(visual_prompt)
-                self.display.set_subtitle("Captured an image for your question.")
-                self.display.render()
-            except RuntimeError:
-                visual_prompt = "I could not access the camera."
+                image_path = self.camera.capture_image()
+                scene_hint = self.camera.analyze_scene(image_path)
+            except RuntimeError as exc:
+                print(f"[ERROR] Vision capture failed: {exc}")
+                raise
+            prompt = self.build_prompt(query, include_vision=True, scene_hint=scene_hint)
+            return call_llava(str(image_path), prompt)
+        return call_phi3(prompt)
 
-        prompt = self.build_prompt(query, visual_prompt)
-        self.display.set_subtitle("Thinking...")
-        self.display.render()
-
-        response = self.llm.ask(prompt)
-        if not response:
-            response = "I am sorry, I could not get a response right now."
-
-        self.memory.add_interaction("user", query)
-        self.memory.add_interaction("assistant", response)
-
-        self.display.set_subtitle(response)
-        self.display.render()
-        self.voice.speak(response)
-        self.display.set_idle()
-        self.display.render()
-
-    def is_visual_request(self, text: str) -> bool:
-        lowered = text.lower()
-        return any(keyword in lowered for keyword in VISUAL_KEYWORDS)
-
-    def build_prompt(self, user_query: str, visual_summary: str | None) -> str:
-        context = self.memory.get_context()
+    def build_prompt(self, query: str, include_vision: bool, scene_hint: str = "") -> str:
+        context = self.memory.get_context_block()
+        user_name = self.profile.get_name() or "unknown"
         prompt_lines = [
-            "You are PraSush, an ambient projector assistant that stays quiet until the wake word is spoken.",
-            "Answer clearly and include any memory context from recent interactions.",
+            "You are PraSush, an ambient AI assistant with a calm projector presence.",
+            "Be concise, helpful, and conversational. Refer to yourself as PraSush when asked your name.",
+            f"Known user name: {user_name}",
+            f"Previous context: {context}",
+            f"Vision enabled for this turn: {'yes' if include_vision else 'no'}",
+            "If vision is enabled, assume the latest camera image represents what you can currently see.",
+            "When answering visual questions, mention whether you see a person or face, and mention notable nearby objects if visible.",
+            "Do not claim biometric identity recognition. You may say you can see the user if a person is visible.",
+            f"User query: {query}",
+            "Assistant:",
         ]
-        if context:
-            prompt_lines.append("Recent memory:")
-            prompt_lines.append(context)
-        if visual_summary:
-            prompt_lines.append("The user asked a visual question. Here is the camera summary:")
-            prompt_lines.append(visual_summary)
-        prompt_lines.append(f"User: {user_query}")
-        prompt_lines.append("Assistant:")
+        if scene_hint:
+            prompt_lines.insert(-2, f"Camera analysis hint: {scene_hint}")
         return "\n".join(prompt_lines)
 
-    def shutdown(self):
+    def capture_user_name(self) -> None:
+        self.speak_with_presence("greeting", "Getting to know you", ASK_NAME_MESSAGE)
+        self.display.set_state("listening", "Listening for your name", "Tell me your name.")
+        spoken_name = self.voice.record_query()
+        parsed_name = self.extract_name(spoken_name)
+        if not parsed_name:
+            fallback = "I will remember your name once I hear it clearly."
+            print("[ERROR] Could not parse user name from onboarding response.")
+            self.speak_with_presence("speaking", "Speaking", fallback)
+            return
+
+        self.profile.set_name(parsed_name)
+        confirmation = f"Nice to meet you, {parsed_name}. I will remember your name."
+        self.speak_with_presence("speaking", "Speaking", confirmation)
+
+    def speak_with_presence(self, state: str, status_text: str, message: str) -> None:
+        self.display.set_state(state, status_text, message)
+        self.voice.speak(message)
+        while self.voice.is_speaking():
+            self.display.pump_events()
+            self.display.render()
+            time.sleep(0.03)
+        self.voice.wait_until_done()
+
+    def extract_name(self, spoken_text: str) -> str:
+        if not spoken_text:
+            return ""
+        cleaned = spoken_text.strip()
+        patterns = [
+            r"\bmy name is ([A-Za-z][A-Za-z'\- ]{0,40})",
+            r"\bi am ([A-Za-z][A-Za-z'\- ]{0,40})",
+            r"\bi'm ([A-Za-z][A-Za-z'\- ]{0,40})",
+            r"\bcall me ([A-Za-z][A-Za-z'\- ]{0,40})",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, cleaned, flags=re.IGNORECASE)
+            if match:
+                return self.normalize_name(match.group(1))
+        if len(cleaned.split()) <= 3:
+            return self.normalize_name(cleaned)
+        return ""
+
+    def normalize_name(self, value: str) -> str:
+        letters_only = re.sub(r"[^A-Za-z'\- ]", "", value).strip()
+        return " ".join(part.capitalize() for part in letters_only.split()[:3])
+
+    def is_wake_match(self, spoken_text: str) -> bool:
+        lowered = spoken_text.lower().strip()
+        normalized = re.sub(r"[^a-z ]", " ", lowered)
+        normalized = " ".join(normalized.split())
+
+        if WAKE_WORD in normalized:
+            return True
+
+        if normalized in {"hi", "hello", "hey"}:
+            return True
+
+        return any(variant in normalized for variant in WAKE_VARIANTS)
+
+    def shutdown(self) -> None:
         self.camera.close()
         self.display.close()
         sys.exit(0)
 
 
 if __name__ == "__main__":
-    app = PraSushApp()
-    app.run()
+    PraSushApp().run()

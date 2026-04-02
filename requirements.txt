@@ -1,7 +1,7 @@
-pygame
-numpy
-sounddevice
 opencv-python
+pygame
 pyttsx3
 requests
+sounddevice
+soundfile
 faster-whisper
