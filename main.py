@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
 import re
 import sys
 import time
+from zoneinfo import ZoneInfo
 
-from config import USE_VISION, WAKE_VARIANTS, WAKE_WORD
+from config import BASE_DIR, LOCAL_TIMEZONE, USE_VISION, WAKE_VARIANTS, WAKE_WORD
 from llm.client import VisionKeywordRouter, call_llava, call_phi3
 from memory.profile import UserProfileStore
 from memory.store import MemoryStore
@@ -85,10 +87,13 @@ class PraSushApp:
     def build_prompt(self, query: str, include_vision: bool, scene_hint: str = "") -> str:
         context = self.memory.get_context_block()
         user_name = self.profile.get_name() or "unknown"
+        runtime_context = self.build_runtime_context()
         prompt_lines = [
-            "You are PraSush, an ambient AI assistant with a calm projector presence.",
-            "Be concise, helpful, and conversational. Refer to yourself as PraSush when asked your name.",
+            "You are PraSush, a personal ambient AI assistant with voice, memory, and optional vision.",
+            "PraSush is your name only. Do not reinterpret it as a blog, brand, recipe, company, acronym, or anything else.",
+            "Be concise, helpful, warm, and conversational. Refer to yourself as PraSush when asked your name.",
             f"Known user name: {user_name}",
+            runtime_context,
             f"Previous context: {context}",
             f"Vision enabled for this turn: {'yes' if include_vision else 'no'}",
             "If vision is enabled, assume the latest camera image represents what you can currently see.",
@@ -100,6 +105,20 @@ class PraSushApp:
         if scene_hint:
             prompt_lines.insert(-2, f"Camera analysis hint: {scene_hint}")
         return "\n".join(prompt_lines)
+
+    def build_runtime_context(self) -> str:
+        now = datetime.now(ZoneInfo(LOCAL_TIMEZONE))
+        date_text = now.strftime("%A, %d %B %Y")
+        time_text = now.strftime("%I:%M %p")
+        workspace_text = str(BASE_DIR)
+        return (
+            f"Current runtime context: Date: {date_text}. "
+            f"Time: {time_text}. "
+            f"Timezone: {LOCAL_TIMEZONE}. "
+            f"Workspace location: {workspace_text}. "
+            "Use this runtime context when answering questions about today's date, current time, timezone, or where we are in the current app session. "
+            "If the user asks where we are, answer using the workspace location unless they clearly mean a real-world geographic location."
+        )
 
     def capture_user_name(self) -> None:
         self.speak_with_presence("greeting", "Getting to know you", ASK_NAME_MESSAGE)
@@ -163,7 +182,6 @@ class PraSushApp:
     def shutdown(self) -> None:
         self.camera.close()
         self.display.close()
-        app_logger.info("PraSush shutdown complete")
         sys.exit(0)
 
 

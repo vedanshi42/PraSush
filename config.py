@@ -6,6 +6,7 @@ MAX_MEMORY_CONTEXT = 5
 AVATAR_IMAGE_PATH = "avatar.png"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
+LOCAL_TIMEZONE = "Asia/Calcutta"
 
 OLLAMA_ENDPOINT = "http://localhost:11434/api"
 PHI3_MODEL = "phi3"
