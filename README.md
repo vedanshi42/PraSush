@@ -133,6 +133,8 @@ For every LLM request, PraSush prints:
 
 For failures, PraSush prints explicit `[ERROR]` logs and raises errors instead of silently falling back.
 
+Backend logs are also written to the `logs/` folder so you can share the latest `.log` file when debugging microphone, transcription, or model issues.
+
 ## Detailed test run instructions
 
 ### Test 1. Basic startup

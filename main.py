@@ -4,10 +4,10 @@ from datetime import datetime
 import re
 import sys
 import time
-from zoneinfo import ZoneInfo
 
 from config import BASE_DIR, LOCAL_TIMEZONE, USE_VISION, WAKE_VARIANTS, WAKE_WORD
 from llm.client import VisionKeywordRouter, call_llava, call_phi3
+from logger import app_logger
 from memory.profile import UserProfileStore
 from memory.store import MemoryStore
 from ui.display import DisplayManager
@@ -20,6 +20,7 @@ ASK_NAME_MESSAGE = "Before we begin, what should I call you?"
 
 class PraSushApp:
     def __init__(self) -> None:
+        app_logger.info("Initializing PraSush application")
         self.display = DisplayManager()
         self.memory = MemoryStore()
         self.profile = UserProfileStore()
@@ -29,12 +30,15 @@ class PraSushApp:
 
     def run(self) -> None:
         self.display.set_state("idle", "Waiting for wake word", "Say 'Hey PraSush' to begin.")
+        app_logger.info("PraSush main loop started")
         try:
             while True:
                 self.display.pump_events()
                 wake_text = self.voice.listen_for_wakeword()
                 if wake_text and self.is_wake_match(wake_text):
+                    app_logger.info(f"Wake word matched from transcript: {wake_text}")
                     self.handle_interaction()
+                    time.sleep(0.8)
                 self.display.render()
                 time.sleep(0.1)
         except KeyboardInterrupt:
@@ -55,15 +59,18 @@ class PraSushApp:
         if not query:
             message = "I could not understand the request."
             print(f"[ERROR] {message}")
+            app_logger.warning("User query transcript was empty after wake flow")
             self.display.set_state("idle", "Listening timeout", message)
             return
 
+        app_logger.info(f"Handling user query: {query}")
         self.display.set_state("thinking", "Thinking", "Analyzing your request...")
         try:
             response = self.answer_query(query)
         except RuntimeError as exc:
             response = f"Request failed: {exc}"
             print(f"[ERROR] {response}")
+            app_logger.error(response)
             self.display.set_state("idle", "Request failed", response)
             return
         self.memory.add_exchange(query, response)
@@ -77,8 +84,11 @@ class PraSushApp:
             try:
                 image_path = self.camera.capture_image()
                 scene_hint = self.camera.analyze_scene(image_path)
+                app_logger.info(f"Vision query detected. Scene image: {image_path}")
+                app_logger.info(f"Vision scene hint: {scene_hint}")
             except RuntimeError as exc:
                 print(f"[ERROR] Vision capture failed: {exc}")
+                app_logger.error(f"Vision capture failed: {exc}")
                 raise
             prompt = self.build_prompt(query, include_vision=True, scene_hint=scene_hint)
             return call_llava(str(image_path), prompt)
@@ -107,14 +117,16 @@ class PraSushApp:
         return "\n".join(prompt_lines)
 
     def build_runtime_context(self) -> str:
-        now = datetime.now(ZoneInfo(LOCAL_TIMEZONE))
+        now = datetime.now().astimezone()
         date_text = now.strftime("%A, %d %B %Y")
         time_text = now.strftime("%I:%M %p")
+        timezone_name = now.tzname() or LOCAL_TIMEZONE
         workspace_text = str(BASE_DIR)
         return (
             f"Current runtime context: Date: {date_text}. "
             f"Time: {time_text}. "
-            f"Timezone: {LOCAL_TIMEZONE}. "
+            f"Timezone: {timezone_name}. "
+            f"Preferred timezone label: {LOCAL_TIMEZONE}. "
             f"Workspace location: {workspace_text}. "
             "Use this runtime context when answering questions about today's date, current time, timezone, or where we are in the current app session. "
             "If the user asks where we are, answer using the workspace location unless they clearly mean a real-world geographic location."
@@ -138,11 +150,7 @@ class PraSushApp:
     def speak_with_presence(self, state: str, status_text: str, message: str) -> None:
         self.display.set_state(state, status_text, message)
         self.voice.speak(message)
-        while self.voice.is_speaking():
-            self.display.pump_events()
-            self.display.render()
-            time.sleep(0.03)
-        self.voice.wait_until_done()
+        self.display.render()
 
     def extract_name(self, spoken_text: str) -> str:
         if not spoken_text:
@@ -177,9 +185,13 @@ class PraSushApp:
         if normalized in {"hi", "hello", "hey"}:
             return True
 
+        if len(normalized.split()) > 3:
+            return False
+
         return any(variant in normalized for variant in WAKE_VARIANTS)
 
     def shutdown(self) -> None:
+        app_logger.info("PraSush shutting down")
         self.camera.close()
         self.display.close()
         sys.exit(0)

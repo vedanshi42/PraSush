@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from config import AUTO_UNLOAD_VISION, OLLAMA_ENDPOINT, PHI3_MODEL, USE_VISION, VISION_KEYWORDS, VISION_MODEL
+from logger import app_logger
 
 
 class VisionKeywordRouter:
@@ -22,6 +23,8 @@ class VisionKeywordRouter:
 def call_phi3(prompt: str) -> str:
     print("[MODEL USED] Phi-3")
     print("[MODEL] Using Phi3")
+    app_logger.info("[MODEL USED] Phi-3")
+    app_logger.llm_request(prompt)
     payload = {
         "model": PHI3_MODEL,
         "prompt": prompt,
@@ -31,6 +34,8 @@ def call_phi3(prompt: str) -> str:
     parsed = _parse_response(data)
     print(f"[RAW RESPONSE] {json.dumps(data, ensure_ascii=False)}")
     print(f"[PARSED RESPONSE] {parsed}")
+    app_logger.debug(f"[RAW RESPONSE] {json.dumps(data, ensure_ascii=False)}")
+    app_logger.llm_response(parsed)
     return parsed
 
 
@@ -40,6 +45,9 @@ def call_llava(image_path: str, prompt: str) -> str:
 
     print("[MODEL USED] LLaVA")
     print("[MODEL] Using LLaVA (VISION)")
+    app_logger.info("[MODEL USED] LLaVA")
+    app_logger.info(f"LLaVA image path: {image_path}")
+    app_logger.llm_request(prompt)
     payload = {
         "model": VISION_MODEL,
         "prompt": prompt,
@@ -51,9 +59,12 @@ def call_llava(image_path: str, prompt: str) -> str:
     parsed = _parse_response(data)
     print(f"[RAW RESPONSE] {json.dumps(data, ensure_ascii=False)}")
     print(f"[PARSED RESPONSE] {parsed}")
+    app_logger.debug(f"[RAW RESPONSE] {json.dumps(data, ensure_ascii=False)}")
+    app_logger.llm_response(parsed)
 
     if AUTO_UNLOAD_VISION:
         print("[MODEL] Unloading LLaVA to save RAM")
+        app_logger.info("[MODEL] Unloading LLaVA to save RAM")
         unload_model(VISION_MODEL)
 
     return parsed
@@ -68,6 +79,7 @@ def unload_model(model_name: str) -> None:
         requests.post(f"{OLLAMA_ENDPOINT}/generate", json=payload, timeout=30).raise_for_status()
     except requests.RequestException as exc:
         print(f"[ERROR] Failed to unload model '{model_name}': {exc}")
+        app_logger.error(f"Failed to unload model '{model_name}': {exc}")
 
 
 def _post_generate(payload: dict[str, Any]) -> dict[str, Any]:
@@ -80,6 +92,7 @@ def _post_generate(payload: dict[str, Any]) -> dict[str, Any]:
         return data
     except (requests.RequestException, ValueError, RuntimeError) as exc:
         print(f"[ERROR] Ollama request failed: {exc}")
+        app_logger.error(f"Ollama request failed: {exc}")
         raise RuntimeError(f"Ollama request failed: {exc}") from exc
 
 
