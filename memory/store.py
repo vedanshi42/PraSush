@@ -25,7 +25,6 @@ class MemoryStore:
         self.history.append(Exchange(user=user_text, assistant=assistant_text))
         self.history = self.history[-self.max_items :]
         self._save_history()
-        app_logger.debug(f"Added interaction - {role}: {text[:50]}..." if len(text) > 50 else f"Added interaction - {role}: {text}")
 
     def get_context_block(self) -> str:
         if not self.history:
