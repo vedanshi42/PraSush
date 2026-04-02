@@ -1,6 +1,6 @@
 from pathlib import Path
 
-USE_VISION = True
+USE_VISION = False
 AUTO_UNLOAD_VISION = True
 MAX_MEMORY_CONTEXT = 5
 AVATAR_IMAGE_PATH = "avatar.png"

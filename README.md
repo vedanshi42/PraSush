@@ -98,7 +98,7 @@ PraSush opens in a normal window by default so it is easier to test and switch s
 
 1. PraSush listens continuously for `hey prasush`
 2. When detected, avatar state changes to `greeting`
-3. PraSush speaks: `Yes, I am here.`
+3. PraSush introduces itself as PraSush and greets you
 4. It records the next spoken query
 5. If the query contains a vision keyword, it captures `scene.jpg` and routes to LLaVA
 6. Otherwise, it routes to Phi-3
@@ -161,7 +161,7 @@ Expected result:
 
 - UI switches to `Greeting`
 - subtitle shows a hello message
-- PraSush says `Yes, I am here.`
+- PraSush introduces itself and responds with a greeting
 - UI then switches to `Listening`
 
 ### Test 3. Normal Phi-3 reasoning flow
@@ -249,6 +249,29 @@ Expected result:
 - no camera capture occurs
 - no LLaVA call occurs
 - Phi-3 handles the request as a plain text query
+
+### Phi-3 only quick test
+
+If you want to test only Phi-3 first, set in `config.py`:
+
+```python
+USE_VISION = False
+```
+
+Then run:
+
+```powershell
+python main.py
+```
+
+Ask simple questions like:
+
+```text
+Hi
+What is today's date?
+What time is it?
+Who are you?
+```
 
 ### Test 7. Missing camera failure
 
