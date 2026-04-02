@@ -7,6 +7,7 @@ from pathlib import Path
 import sounddevice as sd
 import soundfile as sf
 import pyttsx3
+from logger import app_logger
 
 try:
     from faster_whisper import WhisperModel

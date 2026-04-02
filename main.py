@@ -163,6 +163,7 @@ class PraSushApp:
     def shutdown(self) -> None:
         self.camera.close()
         self.display.close()
+        app_logger.info("PraSush shutdown complete")
         sys.exit(0)
 
 

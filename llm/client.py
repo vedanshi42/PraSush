@@ -9,6 +9,8 @@ import requests
 
 from config import AUTO_UNLOAD_VISION, OLLAMA_ENDPOINT, PHI3_MODEL, USE_VISION, VISION_KEYWORDS, VISION_MODEL
 
+from config import AUTO_UNLOAD_VISION, OLLAMA_ENDPOINT, PHI3_MODEL, USE_VISION, VISION_KEYWORDS, VISION_MODEL
+
 
 class VisionKeywordRouter:
     def __init__(self, keywords: list[str] | None = None) -> None:

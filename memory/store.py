@@ -19,11 +19,13 @@ class MemoryStore:
         self.max_items = max_items
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         self.history = self._load_history()
+        app_logger.info(f"Memory store initialized with max {max_items} items. Current history: {len(self.history)} items")
 
     def add_exchange(self, user_text: str, assistant_text: str) -> None:
         self.history.append(Exchange(user=user_text, assistant=assistant_text))
         self.history = self.history[-self.max_items :]
         self._save_history()
+        app_logger.debug(f"Added interaction - {role}: {text[:50]}..." if len(text) > 50 else f"Added interaction - {role}: {text}")
 
     def get_context_block(self) -> str:
         if not self.history:

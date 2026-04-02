@@ -54,6 +54,7 @@ class DisplayManager:
                 self.close()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    app_logger.info("ESC pressed, shutting down")
                     self.close()
                 if event.key == pygame.K_f:
                     self.toggle_fullscreen()
