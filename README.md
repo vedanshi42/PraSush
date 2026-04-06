@@ -2,20 +2,22 @@
 
 PraSush is a production-oriented Python prototype for an ambient AI assistant with:
 
-- voice interaction using Whisper plus `pyttsx3`
+- voice interaction using Whisper plus platform TTS
 - projector-style fullscreen avatar UI using PyGame
-- Phi-3 on Ollama for normal reasoning
+- CometAPI for normal text reasoning and optional vision
 - optional LLaVA on Ollama for on-demand vision
 - strict RAM-aware behavior so the vision model is not kept loaded unless required
 
 ## Features
 
-- Uses Phi-3 for every normal conversation turn
+- Uses CometAPI for every normal text conversation turn when `LLM_PROVIDER = "cometapi"`
+- Can still use Ollama text mode if `LLM_PROVIDER = "ollama"`
 - Uses LLaVA only when a visual query is detected
 - Captures an image only when vision is needed and saves it as `scene.jpg`
 - Unloads LLaVA after the response when `AUTO_UNLOAD_VISION = True`
 - Logs `[MODEL USED]`, `[RAW RESPONSE]`, and `[PARSED RESPONSE]` on every model call
 - Maintains the last 5 user/assistant exchanges in persistent local memory
+- Stores local reminders and announces them when due
 - Drives an avatar through `idle`, `listening`, `thinking`, `speaking`, and `greeting` states
 - Starts in a normal window for easier testing, with `F` to toggle fullscreen
 - Asks your name on first use and remembers it for later conversations
@@ -24,18 +26,20 @@ PraSush is a production-oriented Python prototype for an ambient AI assistant wi
 
 - `main.py` - main assistant loop
 - `config.py` - runtime configuration
-- `llm/client.py` - Phi-3 and LLaVA Ollama calls with debug logging
-- `voice/recognizer.py` - Whisper STT and `pyttsx3` TTS
+- `llm/client.py` - CometAPI, Google, and Ollama model calls with debug logging
+- `voice/recognizer.py` - Whisper STT and platform-aware TTS
 - `vision/camera.py` - on-demand OpenCV capture
 - `ui/display.py` - fullscreen projector avatar UI
 - `memory/store.py` - persistent rolling conversation memory
+- `memory/reminders.py` - local reminder storage and simple natural-time parsing
 
 ## Configuration
 
 Edit `config.py`:
 
 ```python
-USE_VISION = True
+LLM_PROVIDER = "cometapi"
+USE_VISION = False
 AUTO_UNLOAD_VISION = True
 MAX_MEMORY_CONTEXT = 5
 AVATAR_IMAGE_PATH = "avatar.png"
@@ -43,8 +47,10 @@ AVATAR_IMAGE_PATH = "avatar.png"
 
 Important notes:
 
+- Set the environment variable `COMET_API_KEY` before running PraSush in CometAPI mode.
 - Put your avatar image at `avatar.png` in the project root, or update `AVATAR_IMAGE_PATH`.
 - `USE_VISION = False` disables camera capture and LLaVA routing.
+- When `LLM_PROVIDER = "cometapi"` and `USE_VISION = True`, PraSush can send camera images through CometAPI using the configured multimodal model.
 - `AUTO_UNLOAD_VISION = True` keeps RAM usage lower on 8-16 GB systems.
 
 ## Setup
@@ -62,11 +68,19 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. Install Ollama
+### 3. Set the CometAPI key
+
+In PowerShell:
+
+```powershell
+$env:COMET_API_KEY = "your-cometapi-key"
+```
+
+### 4. Optional: install Ollama for later local vision testing
 
 Install Ollama from [https://ollama.com/download](https://ollama.com/download).
 
-### 4. Pull the required local models
+### 5. Optional: pull the local vision models
 
 ```powershell
 ollama run phi3
@@ -75,7 +89,7 @@ ollama run llava
 
 After each model finishes loading once, you can exit that interactive session with `Ctrl+C`.
 
-### 5. Confirm Ollama API access
+### 6. Confirm Ollama API access if you plan to test vision
 
 PraSush uses:
 
@@ -101,10 +115,16 @@ PraSush opens in a normal window by default so it is easier to test and switch s
 3. PraSush introduces itself as PraSush and greets you
 4. It records the next spoken query
 5. If the query contains a vision keyword, it captures `scene.jpg` and routes to LLaVA
-6. Otherwise, it routes to Phi-3
+6. Otherwise, it routes to the configured text provider
 7. Avatar changes to `thinking`, then `speaking`
 8. The response is spoken aloud and stored in memory
 9. UI returns to `idle`
+
+PraSush also handles a few simple local actions directly:
+
+- current time
+- today's date
+- local reminders
 
 ## Vision trigger keywords
 
@@ -118,7 +138,7 @@ PraSush treats the query as visual if it contains one of:
 
 ## RAM-aware behavior
 
-- Phi-3 is the default assistant model
+- CometAPI is the default text provider in the current configuration
 - LLaVA is only called for visual prompts
 - When `AUTO_UNLOAD_VISION = True`, PraSush explicitly asks Ollama to release LLaVA after the response
 - This behavior is intended for low-resource systems where leaving a vision model resident is too expensive
@@ -166,7 +186,7 @@ Expected result:
 - PraSush introduces itself and responds with a greeting
 - UI then switches to `Listening`
 
-### Test 3. Normal Phi-3 reasoning flow
+### Test 3. Normal CometAPI reasoning flow
 
 After the wake word, say:
 
@@ -178,13 +198,13 @@ Expected result:
 
 - UI switches to `Thinking`
 - terminal logs show:
-  - `[MODEL USED] Phi-3`
+  - `[MODEL USED] CometAPI`
   - `[RAW RESPONSE] ...`
   - `[PARSED RESPONSE] ...`
 - UI switches to `Speaking`
-- PraSush speaks the Phi-3 answer
+- PraSush speaks the CometAPI answer
 
-### Test 4. Vision flow with LLaVA
+### Test 4. Vision flow
 
 After the wake word, say:
 
@@ -196,11 +216,10 @@ Expected result:
 
 - OpenCV captures a webcam frame
 - `scene.jpg` is created in the project root
-- terminal logs show:
-  - `[MODEL USED] LLaVA`
-  - `[RAW RESPONSE] ...`
-  - `[PARSED RESPONSE] ...`
-- if `AUTO_UNLOAD_VISION = True`, terminal also shows:
+- terminal logs show either:
+  - `[MODEL USED] CometAPI Vision`
+  - or `[MODEL USED] LLaVA`
+- if Ollama LLaVA is being used and `AUTO_UNLOAD_VISION = True`, terminal also shows:
   - `[MODEL] Unloading LLaVA to save RAM`
 
 ### Test 5. Memory context
@@ -250,13 +269,14 @@ Expected result:
 
 - no camera capture occurs
 - no LLaVA call occurs
-- Phi-3 handles the request as a plain text query
+- CometAPI handles the request as a plain text query
 
-### Phi-3 only quick test
+### CometAPI only quick test
 
-If you want to test only Phi-3 first, set in `config.py`:
+If you want to test only cloud text mode first, keep in `config.py`:
 
 ```python
+LLM_PROVIDER = "cometapi"
 USE_VISION = False
 ```
 
@@ -318,7 +338,8 @@ This demonstrates:
 ## Troubleshooting
 
 - If speech input fails, confirm the microphone works and is accessible to Python.
-- If speech output fails, verify the Windows TTS engine is available for `pyttsx3`.
+- On Windows, PraSush uses PowerShell/System.Speech for TTS by default.
+- On macOS, PraSush uses the built-in `say` command for TTS.
 - If the UI does not show the intended character, place your image at `avatar.png`.
 - If vision requests fail, test the webcam separately in another app first.
 - If Ollama requests fail, ensure both `phi3` and `llava` are installed locally.

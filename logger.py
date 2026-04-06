@@ -14,6 +14,15 @@ class AppLogger:
         
         self.logger = logging.getLogger("PraSush")
         self.logger.setLevel(logging.DEBUG)
+        self.logger.propagate = False
+
+        if self.logger.handlers:
+            for handler in list(self.logger.handlers):
+                self.logger.removeHandler(handler)
+                try:
+                    handler.close()
+                except Exception:
+                    pass
         
         # File handler
         fh = logging.FileHandler(self.log_file)

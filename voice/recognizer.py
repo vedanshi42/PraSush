@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import platform
 import tempfile
 import time
 from pathlib import Path
+import subprocess
+import base64
 
 import pyttsx3
 import sounddevice as sd
 import soundfile as sf
+from config import TTS_PITCH, TTS_RATE, TTS_VOICE_MAC
 from logger import app_logger
 
 try:
@@ -59,7 +63,7 @@ class SpeechRecognizer:
 
     def record_query(self) -> str:
         try:
-            audio = self.record(duration=8)
+            audio = self.record(duration=6)
             transcript = self.transcribe(audio)
             app_logger.info(f"Query transcript: {transcript or '[empty]'}")
             return transcript
@@ -71,26 +75,102 @@ class SpeechRecognizer:
 
 class SpeechSynthesizer:
     def __init__(self) -> None:
-        self.engine = pyttsx3.init()
-        self.engine.setProperty("rate", 150)
-        self.engine.setProperty("volume", 1.0)
+        self.engine = None
+        self.backend = self._select_backend()
         self._is_speaking = False
+        self._active_process: subprocess.Popen[str] | None = None
+        try:
+            self.engine = pyttsx3.init()
+            self.engine.setProperty("rate", 150)
+            self.engine.setProperty("volume", 1.0)
+            app_logger.info("pyttsx3 initialized successfully")
+        except Exception as exc:
+            self.engine = None
+            app_logger.error(f"pyttsx3 initialization failed: {exc}")
+            if self.backend == "pyttsx3":
+                self.backend = "powershell" if platform.system() == "Windows" else "say"
+        app_logger.info(f"TTS backend selected: {self.backend}")
 
-    def speak(self, text: str) -> None:
+    def start_speaking(self, text: str) -> None:
         if not text:
             return
-        app_logger.info(f"TTS speaking: {text[:200]}")
+        app_logger.info(f"TTS speaking via {self.backend}: {text[:200]}")
         self._is_speaking = True
-        self.engine.say(text)
-        self.engine.runAndWait()
-        self._is_speaking = False
-        time.sleep(0.6)
+        try:
+            if self.backend == "powershell":
+                self._active_process = self._start_powershell_tts(text)
+            elif self.backend == "say":
+                self._active_process = self._start_macos_say(text)
+            elif self.backend == "pyttsx3" and self.engine is not None:
+                self.engine.say(text)
+                self.engine.runAndWait()
+                self._is_speaking = False
+            else:
+                raise RuntimeError(f"Unsupported TTS backend '{self.backend}'")
+        except Exception as exc:
+            app_logger.error(f"TTS playback failed: {exc}")
+            self._is_speaking = False
+            self._active_process = None
+
+    def speak(self, text: str) -> None:
+        self.start_speaking(text)
+        self.wait_until_done()
 
     def is_speaking(self) -> bool:
+        if self._active_process is not None:
+            running = self._active_process.poll() is None
+            self._is_speaking = running
+            if not running:
+                stdout = self._active_process.stdout.read().strip() if self._active_process.stdout else ""
+                stderr = self._active_process.stderr.read().strip() if self._active_process.stderr else ""
+                if stdout:
+                    app_logger.debug(f"TTS stdout: {stdout}")
+                if stderr:
+                    app_logger.warning(f"TTS stderr: {stderr}")
+                self._active_process = None
         return self._is_speaking
 
     def wait_until_done(self) -> None:
-        return None
+        while self.is_speaking():
+            time.sleep(0.05)
+        time.sleep(0.25)
+
+    def _select_backend(self) -> str:
+        system = platform.system()
+        if system == "Windows":
+            return "powershell"
+        if system == "Darwin":
+            return "say"
+        return "pyttsx3"
+
+    def _start_powershell_tts(self, text: str) -> subprocess.Popen[str]:
+        safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        pitch = TTS_PITCH.replace('"', "")
+        script = (
+            "Add-Type -AssemblyName System.Speech; "
+            f"$pitch = '{pitch}'; "
+            f"$raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{base64.b64encode(safe_text.encode('utf-8')).decode('ascii')}')); "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            f"$s.Rate = {TTS_RATE}; "
+            "$s.Volume = 100; "
+            "$ssml = \"<speak version='1.0' xml:lang='en-US'><prosody pitch='$pitch'>$raw</prosody></speak>\"; "
+            "$s.SpeakSsml($ssml)"
+        )
+        encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        return subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-EncodedCommand", encoded_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def _start_macos_say(self, text: str) -> subprocess.Popen[str]:
+        return subprocess.Popen(
+            ["say", "-v", TTS_VOICE_MAC, "-r", "210", text],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
 
 class VoiceAssistant:
@@ -106,6 +186,9 @@ class VoiceAssistant:
 
     def speak(self, text: str) -> None:
         self.synthesizer.speak(text)
+
+    def start_speaking(self, text: str) -> None:
+        self.synthesizer.start_speaking(text)
 
     def is_speaking(self) -> bool:
         return self.synthesizer.is_speaking()
