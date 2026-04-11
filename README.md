@@ -18,6 +18,7 @@ PraSush is a production-oriented Python prototype for an ambient AI assistant wi
 - Logs `[MODEL USED]`, `[RAW RESPONSE]`, and `[PARSED RESPONSE]` on every model call
 - Maintains the last 5 user/assistant exchanges in persistent local memory
 - Stores local reminders and announces them when due
+- Supports English, Hindi, and Hinglish voice queries through Whisper auto-detection
 - Drives an avatar through `idle`, `listening`, `thinking`, `speaking`, and `greeting` states
 - Starts in a normal window for easier testing, with `F` to toggle fullscreen
 - Asks your name on first use and remembers it for later conversations
@@ -52,6 +53,7 @@ Important notes:
 - `USE_VISION = False` disables camera capture and LLaVA routing.
 - When `LLM_PROVIDER = "cometapi"` and `USE_VISION = True`, PraSush can send camera images through CometAPI using the configured multimodal model.
 - `AUTO_UNLOAD_VISION = True` keeps RAM usage lower on 8-16 GB systems.
+- `STT_LANGUAGE = None` lets Whisper auto-detect English, Hindi, and Hinglish. Set it to `"en"` or `"hi"` only if you want to force one language.
 
 ## Setup
 
@@ -293,6 +295,9 @@ Hi
 What is today's date?
 What time is it?
 Who are you?
+Namaste
+Abhi kya time hai?
+Hindi mein batao, tum kya kar sakti ho?
 ```
 
 ### Test 7. Missing camera failure

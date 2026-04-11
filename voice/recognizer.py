@@ -10,7 +10,7 @@ import base64
 import pyttsx3
 import sounddevice as sd
 import soundfile as sf
-from config import TTS_PITCH, TTS_RATE, TTS_VOICE_MAC
+from config import STT_LANGUAGE, TTS_PITCH, TTS_RATE, TTS_VOICE_MAC
 from logger import app_logger
 
 try:
@@ -39,9 +39,17 @@ class SpeechRecognizer:
 
     def transcribe(self, audio_path: Path) -> str:
         try:
-            segments, _ = self.model.transcribe(str(audio_path), beam_size=5, language="en", vad_filter=True)
+            transcribe_options = {
+                "beam_size": 5,
+                "vad_filter": True,
+            }
+            if STT_LANGUAGE:
+                transcribe_options["language"] = STT_LANGUAGE
+            segments, info = self.model.transcribe(str(audio_path), **transcribe_options)
             transcript = " ".join(segment.text.strip() for segment in segments).strip()
+            detected_language = getattr(info, "language", "unknown")
             app_logger.info(f"Transcript: {transcript or '[empty]'}")
+            app_logger.info(f"Detected speech language: {detected_language}")
             return transcript
         finally:
             try:
@@ -146,14 +154,16 @@ class SpeechSynthesizer:
     def _start_powershell_tts(self, text: str) -> subprocess.Popen[str]:
         safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         pitch = TTS_PITCH.replace('"', "")
+        ssml_language = self._ssml_language(text)
         script = (
             "Add-Type -AssemblyName System.Speech; "
             f"$pitch = '{pitch}'; "
+            f"$language = '{ssml_language}'; "
             f"$raw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{base64.b64encode(safe_text.encode('utf-8')).decode('ascii')}')); "
             "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
             f"$s.Rate = {TTS_RATE}; "
             "$s.Volume = 100; "
-            "$ssml = \"<speak version='1.0' xml:lang='en-US'><prosody pitch='$pitch'>$raw</prosody></speak>\"; "
+            "$ssml = \"<speak version='1.0' xml:lang='$language'><prosody pitch='$pitch'>$raw</prosody></speak>\"; "
             "$s.SpeakSsml($ssml)"
         )
         encoded_script = base64.b64encode(script.encode("utf-16le")).decode("ascii")
@@ -171,6 +181,11 @@ class SpeechSynthesizer:
             stderr=subprocess.PIPE,
             text=True,
         )
+
+    def _ssml_language(self, text: str) -> str:
+        if any("\u0900" <= char <= "\u097f" for char in text):
+            return "hi-IN"
+        return "en-US"
 
 
 class VoiceAssistant:

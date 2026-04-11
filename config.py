@@ -1,6 +1,6 @@
 from pathlib import Path
 
-USE_VISION = False
+USE_VISION = True
 AUTO_UNLOAD_VISION = True
 MAX_MEMORY_CONTEXT = 5
 AVATAR_IMAGE_PATH = "avatar.png"
@@ -10,6 +10,8 @@ LOCAL_TIMEZONE = "Asia/Calcutta"
 TTS_RATE = 1
 TTS_PITCH = "+18%"
 TTS_VOICE_MAC = "Samantha"
+STT_LANGUAGE = None  # None lets Whisper auto-detect English, Hindi, and Hinglish.
+SUPPORTED_SPOKEN_LANGUAGES = ["English", "Hindi", "Hinglish"]
 
 OLLAMA_ENDPOINT = "http://localhost:11434/api"
 LLM_PROVIDER = "cometapi"
@@ -28,8 +30,12 @@ WAKE_VARIANTS = [
     "hi",
     "hello",
     "hey",
+    "namaste",
+    "namaskar",
     "hey pra",
     "hi pra",
+    "pra suno",
+    "prasush suno",
     "hey prasu",
     "hey prasush",
     "hey pra sush",

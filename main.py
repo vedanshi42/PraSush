@@ -18,6 +18,7 @@ from voice.recognizer import VoiceAssistant
 GREETING_MESSAGE = "Hello, I am PraSush. I am here with you."
 ASK_NAME_MESSAGE = "Before we begin, what should I call you?"
 STOP_PHRASES = {"stop", "shut down", "shutdown", "close", "exit", "bye"}
+HINDI_STOP_PHRASES = {"band", "band karo", "ruk", "ruko", "bas", "बस", "बंद", "बंद करो", "रुको"}
 MAX_CONVERSATION_TURNS = 6
 FOLLOW_UP_PROMPT = "I'm listening. Ask another question, or say stop."
 
@@ -136,10 +137,14 @@ class PraSushApp:
 
         if self.is_time_question(lowered):
             now = datetime.now().astimezone()
+            if self.prefers_hindi(query):
+                return f"Abhi {now.strftime('%I:%M %p')} ho rahe hain."
             return f"It is {now.strftime('%I:%M %p')} for us right now."
 
         if self.is_date_question(lowered):
             now = datetime.now().astimezone()
+            if self.prefers_hindi(query):
+                return f"Aaj {now.strftime('%A, %d %B %Y')} hai."
             return f"Today is {now.strftime('%A, %d %B %Y')}."
 
         if self.is_reminder_request(lowered):
@@ -184,6 +189,8 @@ class PraSushApp:
             "You are PraSush, a personal ambient AI assistant with voice, memory, and optional vision.",
             "PraSush is your name only. Do not reinterpret it as a blog, brand, recipe, company, acronym, or anything else.",
             "Be concise, helpful, warm, and conversational. Refer to yourself as PraSush when asked your name.",
+            "You support English, Hindi, and Hinglish. Reply in the same language or language mix the user uses, unless they ask for a different language.",
+            "For Hinglish, keep the tone natural for Indian users. Avoid sounding like a literal translation.",
             "Answer in natural spoken sentences. Avoid markdown, bullet lists, and repeated 'User query' / 'Assistant' labels in the answer.",
             f"Known user name: {user_name}",
             runtime_context,
@@ -263,8 +270,9 @@ class PraSushApp:
         return " ".join(part.capitalize() for part in letters_only.split()[:3])
 
     def is_stop_command(self, spoken_text: str) -> bool:
-        normalized = " ".join(re.sub(r"[^a-z ]", " ", spoken_text.lower()).split())
-        return any(phrase in normalized for phrase in STOP_PHRASES)
+        lowered = spoken_text.lower()
+        normalized = " ".join(re.sub(r"[^a-z ]", " ", lowered).split())
+        return any(phrase in normalized for phrase in STOP_PHRASES) or any(phrase in lowered for phrase in HINDI_STOP_PHRASES)
 
     def prepare_spoken_text(self, text: str) -> str:
         cleaned = text.replace("**", "").replace("*", "")
@@ -274,16 +282,32 @@ class PraSushApp:
         return cleaned
 
     def is_reminder_request(self, lowered: str) -> bool:
-        patterns = ("remind me", "set a reminder", "create a reminder", "reminder", "alarm")
+        patterns = ("remind me", "set a reminder", "create a reminder", "reminder", "alarm", "yaad dilana", "yaad dila", "याद दिलाना", "याद दिला")
         return any(pattern in lowered for pattern in patterns)
 
     def is_time_question(self, lowered: str) -> bool:
-        patterns = ("what time", "current time", "time is it", "tell me the time")
+        patterns = ("what time", "current time", "time is it", "tell me the time", "kitna time", "kya time", "samay", "कितना समय", "क्या समय", "समय")
         return any(pattern in lowered for pattern in patterns)
 
     def is_date_question(self, lowered: str) -> bool:
-        patterns = ("what is the date", "today's date", "what day is it", "tell me the date")
+        patterns = ("what is the date", "today's date", "what day is it", "tell me the date", "aaj ki date", "tareekh", "din kya", "आज", "तारीख")
         return any(pattern in lowered for pattern in patterns)
+
+    def prefers_hindi(self, text: str) -> bool:
+        lowered = text.lower()
+        hindi_markers = (
+            "hindi",
+            "hinglish",
+            "kitna",
+            "kya",
+            "samay",
+            "aaj",
+            "batao",
+            "yaad",
+            "kaise",
+            "hai",
+        )
+        return any("\u0900" <= char <= "\u097f" for char in text) or any(marker in lowered for marker in hindi_markers)
 
     def is_wake_match(self, spoken_text: str) -> bool:
         lowered = spoken_text.lower().strip()
