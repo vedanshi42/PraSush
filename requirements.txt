@@ -5,3 +5,5 @@ requests
 sounddevice
 soundfile
 faster-whisper
+openai
+gTTS

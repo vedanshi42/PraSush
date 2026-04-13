@@ -4,13 +4,14 @@ PraSush is a production-oriented Python prototype for an ambient AI assistant wi
 
 - voice interaction using Whisper plus platform TTS
 - projector-style fullscreen avatar UI using PyGame
-- CometAPI for normal text reasoning and optional vision
+- NVIDIA NIM for normal text reasoning and optional vision
 - optional LLaVA on Ollama for on-demand vision
 - strict RAM-aware behavior so the vision model is not kept loaded unless required
 
 ## Features
 
-- Uses CometAPI for every normal text conversation turn when `LLM_PROVIDER = "cometapi"`
+- Uses NVIDIA NIM for normal text conversation turns when `LLM_PROVIDER = "nvidia"`
+- Can use CometAPI if `LLM_PROVIDER = "cometapi"`
 - Can still use Ollama text mode if `LLM_PROVIDER = "ollama"`
 - Uses LLaVA only when a visual query is detected
 - Captures an image only when vision is needed and saves it as `scene.jpg`
@@ -27,7 +28,7 @@ PraSush is a production-oriented Python prototype for an ambient AI assistant wi
 
 - `main.py` - main assistant loop
 - `config.py` - runtime configuration
-- `llm/client.py` - CometAPI, Google, and Ollama model calls with debug logging
+- `llm/client.py` - NVIDIA, CometAPI, Google, and Ollama model calls with debug logging
 - `voice/recognizer.py` - Whisper STT and platform-aware TTS
 - `vision/camera.py` - on-demand OpenCV capture
 - `ui/display.py` - fullscreen projector avatar UI
@@ -39,7 +40,7 @@ PraSush is a production-oriented Python prototype for an ambient AI assistant wi
 Edit `config.py`:
 
 ```python
-LLM_PROVIDER = "cometapi"
+LLM_PROVIDER = "nvidia"
 USE_VISION = False
 AUTO_UNLOAD_VISION = True
 MAX_MEMORY_CONTEXT = 5
@@ -48,7 +49,11 @@ AVATAR_IMAGE_PATH = "avatar.png"
 
 Important notes:
 
-- Set the environment variable `COMET_API_KEY` before running PraSush in CometAPI mode.
+- Set the environment variable `NVIDIA_API_KEY` before running PraSush in NVIDIA mode.
+- `NVIDIA_TEXT_MODEL` defaults to `nvidia/nemotron-4-mini-hindi-4b-instruct`.
+- `NVIDIA_VISION_MODEL` defaults to `microsoft/phi-4-multimodal-instruct`.
+- `COMET_MODEL` defaults to `gemini-2.5-flash`, which matches the earlier working setup, and you can override it with an environment variable if your Comet account supports another model.
+- If you receive a `403 Forbidden` error, verify that your Comet API key is valid, has permission for the selected model, and that the selected `COMET_MODEL` is supported by your key.
 - Put your avatar image at `avatar.png` in the project root, or update `AVATAR_IMAGE_PATH`.
 - `USE_VISION = False` disables camera capture and LLaVA routing.
 - When `LLM_PROVIDER = "cometapi"` and `USE_VISION = True`, PraSush can send camera images through CometAPI using the configured multimodal model.
@@ -70,13 +75,21 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. Set the CometAPI key
+### 3. Set the NVIDIA key
 
-In PowerShell:
-
+For the current PowerShell session:
 ```powershell
-$env:COMET_API_KEY = "your-cometapi-key"
+$env:NVIDIA_API_KEY = "your-nvidia-api-key"
 ```
+
+Or create a local `.env` file in the project root:
+```text
+NVIDIA_API_KEY=your-nvidia-api-key
+NVIDIA_TEXT_MODEL=nvidia/nemotron-4-mini-hindi-4b-instruct
+NVIDIA_VISION_MODEL=microsoft/phi-4-multimodal-instruct
+```
+
+PraSush also checks Windows User and Machine environment variables directly. If you want to keep Comet as a fallback, you can still set `COMET_API_KEY` and `COMET_MODEL` too.
 
 ### 4. Optional: install Ollama for later local vision testing
 
@@ -140,7 +153,7 @@ PraSush treats the query as visual if it contains one of:
 
 ## RAM-aware behavior
 
-- CometAPI is the default text provider in the current configuration
+- NVIDIA is the default text provider in the current configuration
 - LLaVA is only called for visual prompts
 - When `AUTO_UNLOAD_VISION = True`, PraSush explicitly asks Ollama to release LLaVA after the response
 - This behavior is intended for low-resource systems where leaving a vision model resident is too expensive
@@ -188,7 +201,7 @@ Expected result:
 - PraSush introduces itself and responds with a greeting
 - UI then switches to `Listening`
 
-### Test 3. Normal CometAPI reasoning flow
+### Test 3. Normal NVIDIA reasoning flow
 
 After the wake word, say:
 
@@ -200,11 +213,11 @@ Expected result:
 
 - UI switches to `Thinking`
 - terminal logs show:
-  - `[MODEL USED] CometAPI`
+  - `[MODEL USED] NVIDIA`
   - `[RAW RESPONSE] ...`
   - `[PARSED RESPONSE] ...`
 - UI switches to `Speaking`
-- PraSush speaks the CometAPI answer
+- PraSush speaks the NVIDIA answer
 
 ### Test 4. Vision flow
 
@@ -219,7 +232,7 @@ Expected result:
 - OpenCV captures a webcam frame
 - `scene.jpg` is created in the project root
 - terminal logs show either:
-  - `[MODEL USED] CometAPI Vision`
+  - `[MODEL USED] NVIDIA Vision`
   - or `[MODEL USED] LLaVA`
 - if Ollama LLaVA is being used and `AUTO_UNLOAD_VISION = True`, terminal also shows:
   - `[MODEL] Unloading LLaVA to save RAM`
@@ -271,14 +284,14 @@ Expected result:
 
 - no camera capture occurs
 - no LLaVA call occurs
-- CometAPI handles the request as a plain text query
+- NVIDIA handles the request as a plain text query
 
-### CometAPI only quick test
+### NVIDIA only quick test
 
 If you want to test only cloud text mode first, keep in `config.py`:
 
 ```python
-LLM_PROVIDER = "cometapi"
+LLM_PROVIDER = "nvidia"
 USE_VISION = False
 ```
 

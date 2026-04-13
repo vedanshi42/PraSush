@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pygame
 
-from config import AVATAR_PATH, PROJECT_NAME, WINDOW_HEIGHT, WINDOW_WIDTH
+from config import AVATAR_PATH, PROJECT_NAME, STATUS_FONT_NAME, SUBTITLE_FONT_NAME, WINDOW_HEIGHT, WINDOW_WIDTH
 
 STATE_STYLES = {
     "idle": {"label": "Idle", "zoom": 0.99, "alpha": 210},
@@ -26,8 +26,8 @@ class DisplayManager:
         self.width, self.height = self.screen.get_size()
         pygame.display.set_caption(PROJECT_NAME)
         self.clock = pygame.time.Clock()
-        self.status_font = pygame.font.Font(None, 24)
-        self.subtitle_font = pygame.font.Font(None, 34)
+        self.status_font = self._load_font(STATUS_FONT_NAME, 24)
+        self.subtitle_font = self._load_font(SUBTITLE_FONT_NAME, 34)
         self.avatar_surface = self._load_avatar(avatar_path)
         self.state = "idle"
         self.status_text = "Waiting for wake word"
@@ -155,3 +155,16 @@ class DisplayManager:
         if self.state == "thinking":
             return math.sin(tick * 1.4) * 0.6
         return math.sin(tick * 1.1) * 0.35
+
+    def _load_font(self, preferred_name: str, size: int) -> pygame.font.Font:
+        preferred = pygame.font.match_font(preferred_name)
+        if preferred:
+            return pygame.font.Font(preferred, size)
+
+        fallback_names = ["Nirmala UI", "Mangal", "Aparajita", "Segoe UI", "Arial Unicode MS"]
+        for name in fallback_names:
+            matched = pygame.font.match_font(name)
+            if matched:
+                return pygame.font.Font(matched, size)
+
+        return pygame.font.Font(None, size)
