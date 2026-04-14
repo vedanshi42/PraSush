@@ -111,6 +111,12 @@ def _parse_chat_response(data: dict[str, Any]) -> str:
     raise RuntimeError("Provider response did not include assistant content.")
 
 
+def _prepend_user_name(prompt: str, user_name: str | None) -> str:
+    if user_name:
+        return f"User name: {user_name}\n\n{prompt}"
+    return prompt
+
+
 def _call_custom_provider(
     api_key: str,
     endpoint: str,
@@ -150,6 +156,7 @@ def api_chat() -> Any:
     if not query:
         return jsonify({"error": "The 'query' field is required."}), 400
 
+    user_name = str(payload.get("user_name", "")).strip() or None
     image_data = payload.get("image_data")
     custom = bool(payload.get("custom"))
     provider_settings = payload.get("provider_settings") if custom else None
@@ -173,11 +180,12 @@ def api_chat() -> Any:
             if image_data:
                 image_data = _parse_image_data(str(image_data))
                 image_data = base64.b64encode(image_data).decode("utf-8")
+            prompt = _prepend_user_name(query, user_name)
             response_text = _call_custom_provider(
                 api_key=api_key,
                 endpoint=endpoint,
                 model=model,
-                prompt=query,
+                prompt=prompt,
                 image_data=image_data,
             )
 
@@ -191,14 +199,16 @@ def api_chat() -> Any:
                     tmp_file.write(image_bytes)
                     temp_path = tmp_file.name
                 try:
-                    response_text = call_vision_model(temp_path, query)
+                    prompt = _prepend_user_name(query, user_name)
+                    response_text = call_vision_model(temp_path, prompt)
                 finally:
                     try:
                         os.unlink(temp_path)
                     except OSError:
                         pass
             else:
-                response_text = call_text_model(query)
+                prompt = _prepend_user_name(query, user_name)
+                response_text = call_text_model(prompt)
 
         return jsonify({"response": response_text})
 

@@ -70,6 +70,7 @@ This repository now includes a browser-based UI under the `docs/` folder. You ca
 1. In GitHub repo settings, enable GitHub Pages and select the `docs/` folder as the site source.
 2. Place `docs/js/default-config.js` in the repo with your default NVIDIA settings if you want the default mode to work automatically.
 3. If you want the web UI to call the Python backend instead of direct provider requests, run `python server.py` and update `window.PRA_SUSH_BACKEND_URL` in `docs/js/default-config.js` to the backend address.
+   - When using the backend, the default provider uses the server-side `.env` or `NVIDIA_API_KEY` environment variable.
 4. Open the generated GitHub Pages URL.
 
 ### Notes

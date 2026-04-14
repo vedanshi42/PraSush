@@ -22,6 +22,12 @@ const responseOutput = document.getElementById("response-output");
 const statusText = document.getElementById("status-text");
 const avatarStatus = document.getElementById("avatar-status");
 const avatarScreen = document.getElementById("avatar-screen");
+const avatarCard = document.getElementById("avatar-card");
+const nameCollectSection = document.getElementById("name-collect");
+const nameInput = document.getElementById("name-input");
+const nameSubmitButton = document.getElementById("name-submit-button");
+const nameSkipButton = document.getElementById("name-skip-button");
+const chatInterfaceSection = document.getElementById("chat-interface");
 
 const STORAGE_KEYS = {
   provider: "pra_sush_provider",
@@ -29,6 +35,7 @@ const STORAGE_KEYS = {
   model: "pra_sush_model",
   rememberKey: "pra_sush_remember_key",
   apiKey: "pra_sush_api_key",
+  name: "pra_sush_user_name",
 };
 
 const defaultConfig = {
@@ -42,6 +49,7 @@ const defaultConfig = {
 let client = null;
 let currentMode = null;
 let recognition = null;
+let userName = "";
 
 function showSection(section) {
   modeSection.classList.toggle("hidden", section !== "mode");
@@ -49,9 +57,12 @@ function showSection(section) {
   chatSection.classList.toggle("hidden", section !== "chat");
 }
 
-function setAvatar(text, status) {
+function setAvatar(text, status, mode = "idle") {
   avatarScreen.textContent = text;
   avatarStatus.textContent = status;
+  avatarCard.classList.toggle("avatar-busy", mode === "busy");
+  avatarCard.classList.toggle("avatar-listening", mode === "listening");
+  avatarCard.classList.toggle("avatar-speaking", mode === "speaking");
 }
 
 function setStatus(message, isError = false) {
@@ -88,6 +99,69 @@ function saveCustomSettings() {
     localStorage.setItem(STORAGE_KEYS.apiKey, apiKeyInput.value.trim());
   } else {
     localStorage.removeItem(STORAGE_KEYS.apiKey);
+  }
+}
+
+function getStoredUserName() {
+  return (localStorage.getItem(STORAGE_KEYS.name) || "").trim();
+}
+
+function saveUserName(name) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return;
+  }
+  userName = trimmed;
+  localStorage.setItem(STORAGE_KEYS.name, trimmed);
+}
+
+function showNameCollection() {
+  nameCollectSection.classList.remove("hidden");
+  chatInterfaceSection.classList.add("hidden");
+  setAvatar("Hello! I am PraSush.", "What should I call you?", "idle");
+  setStatus("Please enter your name so I can remember you.");
+}
+
+function showChatInterface() {
+  nameCollectSection.classList.add("hidden");
+  chatInterfaceSection.classList.remove("hidden");
+  queryInput.disabled = false;
+  sendQueryButton.disabled = false;
+  micButton.disabled = false;
+  cameraButton.disabled = false;
+  queryInput.focus();
+  const displayName = userName ? `Welcome back, ${userName}!` : "Ready for voice or text input.";
+  setAvatar(`Hello ${userName || "friend"}!`, displayName, "idle");
+  setStatus(`Hi ${userName || "there"}. Ask me anything.`);
+}
+
+function ensureNameFlow() {
+  const stored = getStoredUserName();
+  if (stored) {
+    userName = stored;
+    showChatInterface();
+    return;
+  }
+  showNameCollection();
+}
+
+function handleNameSubmit() {
+  if (!nameInput.value.trim()) {
+    setStatus("Enter a name before continuing.", true);
+    return;
+  }
+  saveUserName(nameInput.value);
+  showChatInterface();
+}
+
+function handleNameSkip() {
+  saveUserName("Friend");
+  showChatInterface();
+}
+
+function updateAvatarGreeting() {
+  if (userName) {
+    setAvatar(`Hello ${userName}!`, "Ready for voice or text input.", "idle");
   }
 }
 
@@ -135,25 +209,35 @@ function disableChatControls() {
 function enterDefaultMode() {
   currentMode = "default";
   showSection("chat");
-  setAvatar("Say hi to start chat.", "Ready for voice or text input.");
-  setStatus("Default NVIDIA provider is selected.");
+  setAvatar("Say hi to start chat.", "Ready for voice or text input.", "idle");
 
+  if (defaultConfig.backendUrl) {
+    defaultWarning.classList.add("hidden");
+    setStatus(`Using backend server at ${defaultConfig.backendUrl}`);
+    client = null;
+    ensureNameFlow();
+    return;
+  }
+
+  setStatus("Default NVIDIA provider is selected.");
   if (!defaultConfig.apiKey) {
     setStatus("Default API key is not configured. Please fill docs/js/default-config.js or use custom mode.", true);
     defaultWarning.textContent = "Default key is missing. Add your NVIDIA key to docs/js/default-config.js before publishing.";
     defaultWarning.classList.remove("hidden");
     disableChatControls();
+    showNameCollection();
     return;
   }
 
   defaultWarning.classList.add("hidden");
-  enableChatControls();
   client = new ProviderClient({
     provider: defaultConfig.provider,
     endpoint: defaultConfig.endpoint,
     model: defaultConfig.model,
     apiKey: defaultConfig.apiKey,
+    userName,
   });
+  ensureNameFlow();
 }
 
 function enterCustomMode() {
@@ -205,7 +289,7 @@ async function sendChat(message, imageData = null) {
     return;
   }
 
-  setAvatar("Thinking...", "Processing your request.");
+  setAvatar("Thinking...", "Processing your request.", "busy");
   setStatus("Sending request to the provider...");
   disableChatControls();
 
@@ -214,7 +298,8 @@ async function sendChat(message, imageData = null) {
       ? await backendChat(message, imageData)
       : await client.chat(message, imageData);
     responseOutput.textContent = response;
-    setAvatar(response, "Response received.");
+    speakResponse(response);
+    setAvatar(response, "Response received.", "idle");
     setStatus("Success.");
     enableChatControls();
   } catch (error) {
@@ -230,6 +315,7 @@ async function backendChat(message, imageData = null) {
   const payload = {
     query: message,
     image_data: imageData || null,
+    user_name: userName || null,
     custom: currentMode === "custom",
     provider_settings: currentMode === "custom" ? {
       endpoint: endpointInput.value.trim(),
@@ -348,6 +434,21 @@ async function startVoiceRecognition() {
   }
 }
 
+function speakResponse(text) {
+  if (!text || !window.speechSynthesis) {
+    return;
+  }
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-IN";
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn("Speech synthesis failed:", err);
+  }
+}
+
 async function triggerCameraQuery() {
   const query = queryInput.value.trim();
   if (!query) {
@@ -374,10 +475,9 @@ function finishSetup() {
     validateApiConfig(provider, endpoint, model, apiKey);
     saveCustomSettings();
 
-    client = new ProviderClient({ provider, endpoint, model, apiKey });
-    enableChatControls();
+    client = new ProviderClient({ provider, endpoint, model, apiKey, userName });
     showSection("chat");
-    setAvatar("Say hi to start chat.", "Ready for voice or text input.");
+    ensureNameFlow();
     setStatus("Custom provider configured.");
   } catch (error) {
     setStatus(error.message, true);
@@ -403,6 +503,8 @@ defaultModeButton.addEventListener("click", enterDefaultMode);
 customModeButton.addEventListener("click", enterCustomMode);
 customContinueButton.addEventListener("click", finishSetup);
 customBackButton.addEventListener("click", resetToStart);
+nameSubmitButton.addEventListener("click", handleNameSubmit);
+nameSkipButton.addEventListener("click", handleNameSkip);
 providerSelect.addEventListener("change", () => updateEndpointAndModel(providerSelect.value));
 sendQueryButton.addEventListener("click", sendQuery);
 resetButton.addEventListener("click", resetToStart);

@@ -65,13 +65,25 @@
     </section>
 
     <section id="chat-screen" class="panel hidden">
-      <div class="avatar-card">
+      <div class="avatar-card" id="avatar-card">
         <div class="avatar-icon">🤖</div>
         <div class="avatar-state" id="avatar-status">Waiting for wake word</div>
         <div class="avatar-screen" id="avatar-screen">Say hi to start chat.</div>
       </div>
 
-      <div class="chat-controls">
+      <div id="name-collect" class="name-panel hidden">
+        <p id="welcome-message">Hello! I am PraSush. What should I call you?</p>
+        <label>
+          Your name
+          <input id="name-input" type="text" placeholder="Enter your name" />
+        </label>
+        <div class="actions">
+          <button type="button" id="name-submit-button">Continue</button>
+          <button type="button" id="name-skip-button">Skip</button>
+        </div>
+      </div>
+
+      <div id="chat-interface" class="chat-controls hidden">
         <label>
           Your message
           <textarea id="query-input" rows="4" placeholder="Type your message here..."></textarea>

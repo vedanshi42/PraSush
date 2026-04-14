@@ -139,6 +139,54 @@ button:disabled {
   color: #334155;
 }
 
+.name-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #f8fbff;
+  border: 1px solid #cbd5e1;
+}
+
+.name-panel label,
+.name-panel p {
+  margin-bottom: 16px;
+}
+
+.name-panel input {
+  width: 100%;
+}
+
+.avatar-card {
+  position: relative;
+}
+
+.avatar-card.avatar-listening {
+  animation: avatar-listen 1.8s ease-in-out infinite;
+}
+
+.avatar-card.avatar-speaking .avatar-icon {
+  animation: avatar-speak 1.2s ease-in-out infinite;
+}
+
+.avatar-card.avatar-busy .avatar-icon {
+  animation: avatar-busy 1.4s ease-in-out infinite;
+}
+
+@keyframes avatar-listen {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes avatar-speak {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes avatar-busy {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
 .output-card,
 .status-card {
   border-radius: 14px;

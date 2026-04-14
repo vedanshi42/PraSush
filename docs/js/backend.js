@@ -10,11 +10,12 @@ const PROVIDER_DEFAULTS = {
 };
 
 export class ProviderClient {
-  constructor({ provider, endpoint, apiKey, model }) {
+  constructor({ provider, endpoint, apiKey, model, userName }) {
     this.provider = provider;
     this.endpoint = endpoint?.trim() || ProviderClient.defaultEndpoint(provider);
     this.apiKey = apiKey?.trim();
     this.model = model?.trim() || ProviderClient.defaultModel(provider);
+    this.userName = userName?.trim() || "";
   }
 
   static defaultEndpoint(provider) {
@@ -26,13 +27,16 @@ export class ProviderClient {
   }
 
   _buildPayload(query) {
+    const systemContent = this.userName
+      ? `You are PraSush, a bilingual AI assistant. The user's name is ${this.userName}. Answer clearly in Hindi or English depending on the user's message.`
+      : "You are PraSush, a bilingual AI assistant. Answer clearly in Hindi or English depending on the user's message.";
+
     return {
       model: this.model,
       messages: [
         {
           role: "system",
-          content:
-            "You are PraSush, a bilingual AI assistant. Answer clearly in Hindi or English depending on the user's message.",
+          content: systemContent,
         },
         {
           role: "user",
@@ -45,8 +49,9 @@ export class ProviderClient {
   }
 
   _buildVisionPayload(query, imageData) {
-    const systemContent =
-      "You are PraSush, a bilingual AI assistant with vision. The user asked a visual question. Use the captured scene image and reply naturally in the same language.";
+    const systemContent = this.userName
+      ? `You are PraSush, a bilingual AI assistant with vision. The user's name is ${this.userName}. The user asked a visual question. Use the captured scene image and reply naturally in the same language.`
+      : "You are PraSush, a bilingual AI assistant with vision. The user asked a visual question. Use the captured scene image and reply naturally in the same language.";
     const userContent = [
       { type: "text", text: query },
       { type: "image_url", image_url: { url: imageData } },
