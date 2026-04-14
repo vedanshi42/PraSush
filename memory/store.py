@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from config import MAX_MEMORY_CONTEXT, MEMORY_PATH
+from logger import app_logger
 
 
 @dataclass
@@ -25,15 +26,20 @@ class MemoryStore:
         self.history = self.history[-self.max_items :]
         self._save_history()
 
-    def get_context_block(self) -> str:
+    def get_context_block(self, max_chars: int = 500) -> str:
         if not self.history:
             return "No previous context."
 
         lines: list[str] = []
         for index, item in enumerate(self.history[-self.max_items :], start=1):
-            lines.append(f"{index}. User: {item.user}")
-            lines.append(f"{index}. Assistant: {item.assistant}")
-        return " ".join(lines)
+            user_text = " ".join(item.user.split())[:120]
+            assistant_text = " ".join(item.assistant.split())[:180]
+            lines.append(f"{index}. User: {user_text}")
+            lines.append(f"{index}. Assistant: {assistant_text}")
+        compact = " ".join(lines)
+        if len(compact) <= max_chars:
+            return compact
+        return compact[: max_chars - 3] + "..."
 
     def _load_history(self) -> list[Exchange]:
         if not self.file_path.exists():
@@ -41,11 +47,11 @@ class MemoryStore:
         try:
             raw = json.loads(self.file_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            print(f"[ERROR] Failed to load memory history: {exc}")
+            app_logger.error(f"Failed to load memory history: {exc}")
             return []
 
         if not isinstance(raw, list):
-            print("[ERROR] Memory history format is invalid.")
+            app_logger.error("Memory history format is invalid.")
             return []
 
         history: list[Exchange] = []
@@ -63,4 +69,4 @@ class MemoryStore:
         try:
             self.file_path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
         except OSError as exc:
-            print(f"[ERROR] Failed to save memory history: {exc}")
+            app_logger.error(f"Failed to save memory history: {exc}")

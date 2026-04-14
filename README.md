@@ -1,363 +1,103 @@
-# PraSush
+﻿# PraSush
 
-PraSush is a production-oriented Python prototype for an ambient AI assistant with:
+PraSush is a Python prototype for an ambient AI assistant with:
 
 - voice interaction using Whisper plus platform TTS
-- projector-style fullscreen avatar UI using PyGame
-- NVIDIA NIM for normal text reasoning and optional vision
-- optional LLaVA on Ollama for on-demand vision
-- strict RAM-aware behavior so the vision model is not kept loaded unless required
+- a projector-style avatar UI using PyGame
+- NVIDIA NIM for text reasoning and optional vision
+- local reminders, rolling memory, and bilingual interaction
 
 ## Features
 
-- Uses NVIDIA NIM for normal text conversation turns when `LLM_PROVIDER = "nvidia"`
-- Can use CometAPI if `LLM_PROVIDER = "cometapi"`
-- Can still use Ollama text mode if `LLM_PROVIDER = "ollama"`
-- Uses LLaVA only when a visual query is detected
-- Captures an image only when vision is needed and saves it as `scene.jpg`
-- Unloads LLaVA after the response when `AUTO_UNLOAD_VISION = True`
-- Logs `[MODEL USED]`, `[RAW RESPONSE]`, and `[PARSED RESPONSE]` on every model call
-- Maintains the last 5 user/assistant exchanges in persistent local memory
-- Stores local reminders and announces them when due
-- Supports English, Hindi, and Hinglish voice queries through Whisper auto-detection
-- Drives an avatar through `idle`, `listening`, `thinking`, `speaking`, and `greeting` states
-- Starts in a normal window for easier testing, with `F` to toggle fullscreen
-- Asks your name on first use and remembers it for later conversations
-
-## Project structure
-
-- `main.py` - main assistant loop
-- `config.py` - runtime configuration
-- `llm/client.py` - NVIDIA, CometAPI, Google, and Ollama model calls with debug logging
-- `voice/recognizer.py` - Whisper STT and platform-aware TTS
-- `vision/camera.py` - on-demand OpenCV capture
-- `ui/display.py` - fullscreen projector avatar UI
-- `memory/store.py` - persistent rolling conversation memory
-- `memory/reminders.py` - local reminder storage and simple natural-time parsing
+- NVIDIA-only model routing for simpler setup
+- English, Hindi, and Hinglish support
+- per-turn language replies instead of sticky mixed-language output
+- dynamic speech capture that stops shortly after you stop speaking
+- local reminders, date, and time handling
+- optional camera-based vision using the NVIDIA vision model
+- lighter logs with truncated prompts and responses
 
 ## Configuration
 
-Edit `config.py`:
+Important settings in `config.py`:
 
 ```python
-LLM_PROVIDER = "nvidia"
-USE_VISION = False
-AUTO_UNLOAD_VISION = True
-MAX_MEMORY_CONTEXT = 5
-AVATAR_IMAGE_PATH = "avatar.png"
+USE_VISION = True
+MAX_MEMORY_CONTEXT = 3
+NVIDIA_TEXT_MODEL = "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+NVIDIA_VISION_MODEL = "microsoft/phi-4-multimodal-instruct"
+WAKEWORD_MAX_RECORD_SECONDS = 2.5
+QUERY_MAX_RECORD_SECONDS = 8.0
+END_OF_SPEECH_SILENCE_SECONDS = 1.8
 ```
 
-Important notes:
+Set your NVIDIA key before running:
 
-- Set the environment variable `NVIDIA_API_KEY` before running PraSush in NVIDIA mode.
-- `NVIDIA_TEXT_MODEL` defaults to `nvidia/nemotron-4-mini-hindi-4b-instruct`.
-- `NVIDIA_VISION_MODEL` defaults to `microsoft/phi-4-multimodal-instruct`.
-- `COMET_MODEL` defaults to `gemini-2.5-flash`, which matches the earlier working setup, and you can override it with an environment variable if your Comet account supports another model.
-- If you receive a `403 Forbidden` error, verify that your Comet API key is valid, has permission for the selected model, and that the selected `COMET_MODEL` is supported by your key.
-- Put your avatar image at `avatar.png` in the project root, or update `AVATAR_IMAGE_PATH`.
-- `USE_VISION = False` disables camera capture and LLaVA routing.
-- When `LLM_PROVIDER = "cometapi"` and `USE_VISION = True`, PraSush can send camera images through CometAPI using the configured multimodal model.
-- `AUTO_UNLOAD_VISION = True` keeps RAM usage lower on 8-16 GB systems.
-- `STT_LANGUAGE = None` lets Whisper auto-detect English, Hindi, and Hinglish. Set it to `"en"` or `"hi"` only if you want to force one language.
-
-## Setup
-
-### 1. Create and activate a virtual environment
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-### 2. Install Python dependencies
-
-```powershell
-pip install -r requirements.txt
-```
-
-### 3. Set the NVIDIA key
-
-For the current PowerShell session:
 ```powershell
 $env:NVIDIA_API_KEY = "your-nvidia-api-key"
 ```
 
-Or create a local `.env` file in the project root:
-```text
-NVIDIA_API_KEY=your-nvidia-api-key
-NVIDIA_TEXT_MODEL=nvidia/nemotron-4-mini-hindi-4b-instruct
-NVIDIA_VISION_MODEL=microsoft/phi-4-multimodal-instruct
-```
-
-PraSush also checks Windows User and Machine environment variables directly. If you want to keep Comet as a fallback, you can still set `COMET_API_KEY` and `COMET_MODEL` too.
-
-### 4. Optional: install Ollama for later local vision testing
-
-Install Ollama from [https://ollama.com/download](https://ollama.com/download).
-
-### 5. Optional: pull the local vision models
-
-```powershell
-ollama run phi3
-ollama run llava
-```
-
-After each model finishes loading once, you can exit that interactive session with `Ctrl+C`.
-
-### 6. Confirm Ollama API access if you plan to test vision
-
-PraSush uses:
-
-- `http://localhost:11434/api/generate`
-
-Make sure the Ollama service is running before you launch PraSush.
-
-## Running PraSush
+## Run
 
 ```powershell
 python main.py
 ```
 
-PraSush opens in a normal window by default so it is easier to test and switch screens.
+## Web UI and GitHub Pages
 
-- Press `F` to toggle fullscreen projector mode
-- Press `Esc` to close the app
+This repository now includes a browser-based UI under the `docs/` folder. You can deploy the `docs/` folder to GitHub Pages to access PraSush from any browser link.
 
-## Voice and decision flow
+- The web app is static and runs entirely in the browser.
+- Users can choose between:
+  - **Default NVIDIA provider** (configured in `docs/js/default-config.js`)
+  - **Custom provider** with their own endpoint, model, and API key
+- The avatar-style chat screen opens once a mode is selected.
+- The browser supports text chat, microphone input, and camera-assisted vision requests.
+- If the user asks a vision query such as "what do you see" or "describe the room", the page requests camera permission, captures the scene, and sends the image to the provider.
+- If there is an API failure, the avatar displays the error message, the session ends, and the user can restart.
+- The provider endpoint must support CORS for browser-based requests.
 
-1. PraSush listens continuously for `hey prasush`
-2. When detected, avatar state changes to `greeting`
-3. PraSush introduces itself as PraSush and greets you
-4. It records the next spoken query
-5. If the query contains a vision keyword, it captures `scene.jpg` and routes to LLaVA
-6. Otherwise, it routes to the configured text provider
-7. Avatar changes to `thinking`, then `speaking`
-8. The response is spoken aloud and stored in memory
-9. UI returns to `idle`
+### GitHub Pages deployment
 
-PraSush also handles a few simple local actions directly:
+1. In GitHub repo settings, enable GitHub Pages and select the `docs/` folder as the site source.
+2. Place `docs/js/default-config.js` in the repo with your default NVIDIA settings if you want the default mode to work automatically.
+3. Open the generated GitHub Pages URL.
 
-- current time
-- today's date
-- local reminders
+### Notes
 
-## Vision trigger keywords
+- For secure public deployment, do not publish a private API key in the static default config if it must remain secret.
+- Use custom provider mode to allow users to enter their own endpoint, key, and model at runtime.
+- Voice recognition uses the browser's SpeechRecognition API when available; camera capture uses `getUserMedia()`.
 
-PraSush treats the query as visual if it contains one of:
+## Logging and configuration
 
-- `see`
-- `look`
-- `what is this`
-- `describe`
-- `camera`
-
-## RAM-aware behavior
-
-- NVIDIA is the default text provider in the current configuration
-- LLaVA is only called for visual prompts
-- When `AUTO_UNLOAD_VISION = True`, PraSush explicitly asks Ollama to release LLaVA after the response
-- This behavior is intended for low-resource systems where leaving a vision model resident is too expensive
-
-## Debug logging
-
-For every LLM request, PraSush prints:
-
-- `[MODEL USED]`
-- `[RAW RESPONSE]`
-- `[PARSED RESPONSE]`
-
-For failures, PraSush prints explicit `[ERROR]` logs and raises errors instead of silently falling back.
-
-Backend logs are also written to the `logs/` folder so you can share the latest `.log` file when debugging microphone, transcription, or model issues.
-
-## Detailed test run instructions
-
-### Test 1. Basic startup
+By default the app writes INFO and higher logs. To enable debug-level logs, set:
 
 ```powershell
-python main.py
+$env:PRA_SUSH_LOG_LEVEL = "DEBUG"
 ```
 
-Expected result:
+## What changed recently
 
-- a normal window opens first
-- avatar is visible in the center
-- top status shows PraSush in `Idle`
-- bottom subtitle says to say `Hey PraSush`
-- pressing `F` switches between windowed and fullscreen mode
+- old Comet, Google, and Ollama routing was removed
+- prompts were shortened to reduce latency
+- logs were trimmed so they do not grow so aggressively
+- Whisper now does one fast auto-detect pass instead of repeated forced-language retries
+- replies follow the current user turn language by default
+- wake and query recording now stop dynamically after speech ends
 
-### Test 2. Wake word flow
+## Quick test
 
-Say:
+Try this sequence:
 
 ```text
-Hey PraSush
-```
-
-Expected result:
-
-- UI switches to `Greeting`
-- subtitle shows a hello message
-- PraSush introduces itself and responds with a greeting
-- UI then switches to `Listening`
-
-### Test 3. Normal NVIDIA reasoning flow
-
-After the wake word, say:
-
-```text
-What can you help me with?
-```
-
-Expected result:
-
-- UI switches to `Thinking`
-- terminal logs show:
-  - `[MODEL USED] NVIDIA`
-  - `[RAW RESPONSE] ...`
-  - `[PARSED RESPONSE] ...`
-- UI switches to `Speaking`
-- PraSush speaks the NVIDIA answer
-
-### Test 4. Vision flow
-
-After the wake word, say:
-
-```text
-What do you see?
-```
-
-Expected result:
-
-- OpenCV captures a webcam frame
-- `scene.jpg` is created in the project root
-- terminal logs show either:
-  - `[MODEL USED] NVIDIA Vision`
-  - or `[MODEL USED] LLaVA`
-- if Ollama LLaVA is being used and `AUTO_UNLOAD_VISION = True`, terminal also shows:
-  - `[MODEL] Unloading LLaVA to save RAM`
-
-### Test 5. Memory context
-
-Ask 2-3 normal questions in sequence, for example:
-
-```text
-Hey PraSush
-My name is Vedanshi.
-```
-
-Then:
-
-```text
-Hey PraSush
-What is my name?
-```
-
-Expected result:
-
-- PraSush includes recent conversation context in the prompt
-- the stored history is written to `memory/history.json`
-- only the last 5 exchanges are preserved
-
-### Test 6. Vision disabled mode
-
-Set in `config.py`:
-
-```python
-USE_VISION = False
-```
-
-Then run:
-
-```powershell
-python main.py
-```
-
-Ask:
-
-```text
-Hey PraSush
-What do you see?
-```
-
-Expected result:
-
-- no camera capture occurs
-- no LLaVA call occurs
-- NVIDIA handles the request as a plain text query
-
-### NVIDIA only quick test
-
-If you want to test only cloud text mode first, keep in `config.py`:
-
-```python
-LLM_PROVIDER = "nvidia"
-USE_VISION = False
-```
-
-Then run:
-
-```powershell
-python main.py
-```
-
-Ask simple questions like:
-
-```text
-Hi
-What is today's date?
-What time is it?
-Who are you?
 Namaste
-Abhi kya time hai?
-Hindi mein batao, tum kya kar sakti ho?
+Mera naam Vedanshi hai
+Kya kya kar sakte ho?
+What time is it?
+Hindi mein bolo
+Aaj ki date kya hai?
+Speak English
+What do you see?
+Stop
 ```
-
-### Test 7. Missing camera failure
-
-If no webcam is available, ask a visual question.
-
-Expected result:
-
-- PraSush prints an explicit `[ERROR] Vision capture failed: ...`
-- the failure is visible in the terminal
-- there is no silent fallback
-
-### Test 8. Ollama service failure
-
-Stop Ollama, then run:
-
-```powershell
-python main.py
-```
-
-Ask any question after the wake word.
-
-Expected result:
-
-- PraSush prints an explicit `[ERROR] Ollama request failed: ...`
-- the error is not hidden
-
-## Demo script
-
-1. Say `Hey PraSush`
-2. Ask `What can you do?`
-3. Say `Hey PraSush`
-4. Ask `What do you see?`
-
-This demonstrates:
-
-- wake word activation
-- Phi-3 reasoning
-- on-demand LLaVA vision
-- avatar state transitions
-- RAM-aware LLaVA unload behavior
-
-## Troubleshooting
-
-- If speech input fails, confirm the microphone works and is accessible to Python.
-- On Windows, PraSush uses PowerShell/System.Speech for TTS by default.
-- On macOS, PraSush uses the built-in `say` command for TTS.
-- If the UI does not show the intended character, place your image at `avatar.png`.
-- If vision requests fail, test the webcam separately in another app first.
-- If Ollama requests fail, ensure both `phi3` and `llava` are installed locally.

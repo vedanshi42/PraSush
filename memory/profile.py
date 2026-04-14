@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from config import PROFILE_PATH
+from logger import app_logger
 
 
 class UserProfileStore:
@@ -28,7 +29,7 @@ class UserProfileStore:
         try:
             raw = json.loads(self.file_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            print(f"[ERROR] Failed to load user profile: {exc}")
+            app_logger.error(f"Failed to load user profile: {exc}")
             return {}
         return raw if isinstance(raw, dict) else {}
 
@@ -36,4 +37,4 @@ class UserProfileStore:
         try:
             self.file_path.write_text(json.dumps(self.data, indent=2), encoding="utf-8")
         except OSError as exc:
-            print(f"[ERROR] Failed to save user profile: {exc}")
+            app_logger.error(f"Failed to save user profile: {exc}")

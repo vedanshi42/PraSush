@@ -1,66 +1,54 @@
+from __future__ import annotations
+
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"prasush_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+LOG_LEVEL = os.getenv("PRA_SUSH_LOG_LEVEL", "INFO").upper()
+if LOG_LEVEL not in logging._nameToLevel:
+    LOG_LEVEL = "INFO"
+
+logging.basicConfig(
+    level=logging._nameToLevel[LOG_LEVEL],
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+    ],
+)
+
+_logger = logging.getLogger("PraSush")
 
 class AppLogger:
-    def __init__(self, log_dir="logs"):
-        self.log_dir = log_dir
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = os.path.join(log_dir, f"prasush_{timestamp}.log")
-        
-        self.logger = logging.getLogger("PraSush")
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.propagate = False
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
 
-        if self.logger.handlers:
-            for handler in list(self.logger.handlers):
-                self.logger.removeHandler(handler)
-                try:
-                    handler.close()
-                except Exception:
-                    pass
-        
-        # File handler
-        fh = logging.FileHandler(self.log_file)
-        fh.setLevel(logging.DEBUG)
-        
-        # Console handler
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        
-        # Formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        fh.setFormatter(formatter)
-        ch.setFormatter(formatter)
-        
-        self.logger.addHandler(fh)
-        self.logger.addHandler(ch)
-    
-    def info(self, msg):
-        self.logger.info(msg)
-    
-    def debug(self, msg):
-        self.logger.debug(msg)
-    
-    def error(self, msg):
-        self.logger.error(msg)
-    
-    def warning(self, msg):
-        self.logger.warning(msg)
-    
-    def llm_request(self, prompt):
-        self.logger.info(f"LLM Request:\n{prompt}")
-    
-    def llm_response(self, response):
-        self.logger.info(f"LLM Response:\n{response}")
+    def debug(self, message: str, *args, **kwargs) -> None:
+        self._logger.debug(message, *args, **kwargs)
 
+    def info(self, message: str, *args, **kwargs) -> None:
+        self._logger.info(message, *args, **kwargs)
 
-# Global logger instance
-app_logger = AppLogger()
+    def warning(self, message: str, *args, **kwargs) -> None:
+        self._logger.warning(message, *args, **kwargs)
+
+    def error(self, message: str, *args, **kwargs) -> None:
+        self._logger.error(message, *args, **kwargs)
+
+    def exception(self, message: str, *args, **kwargs) -> None:
+        self._logger.exception(message, *args, **kwargs)
+
+    def llm_request(self, prompt: str) -> None:
+        self._logger.debug(f"LLM Request: {prompt}")
+
+    def llm_response(self, response: str) -> None:
+        self._logger.debug(f"LLM Response: {response}")
+
+    def __getattr__(self, name: str):
+        return getattr(self._logger, name)
+
+app_logger = AppLogger(_logger)
