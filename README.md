@@ -39,15 +39,23 @@ $env:NVIDIA_API_KEY = "your-nvidia-api-key"
 
 ## Run
 
+Run the desktop assistant:
+
 ```powershell
 python main.py
+```
+
+Run the browser backend server for the web UI:
+
+```powershell
+python server.py
 ```
 
 ## Web UI and GitHub Pages
 
 This repository now includes a browser-based UI under the `docs/` folder. You can deploy the `docs/` folder to GitHub Pages to access PraSush from any browser link.
 
-- The web app is static and runs entirely in the browser.
+- The web app can use a Python backend server for real provider integration.
 - Users can choose between:
   - **Default NVIDIA provider** (configured in `docs/js/default-config.js`)
   - **Custom provider** with their own endpoint, model, and API key
@@ -55,13 +63,14 @@ This repository now includes a browser-based UI under the `docs/` folder. You ca
 - The browser supports text chat, microphone input, and camera-assisted vision requests.
 - If the user asks a vision query such as "what do you see" or "describe the room", the page requests camera permission, captures the scene, and sends the image to the provider.
 - If there is an API failure, the avatar displays the error message, the session ends, and the user can restart.
-- The provider endpoint must support CORS for browser-based requests.
+- The provider endpoint must support CORS for browser-based requests unless you are using the Python backend server.
 
 ### GitHub Pages deployment
 
 1. In GitHub repo settings, enable GitHub Pages and select the `docs/` folder as the site source.
 2. Place `docs/js/default-config.js` in the repo with your default NVIDIA settings if you want the default mode to work automatically.
-3. Open the generated GitHub Pages URL.
+3. If you want the web UI to call the Python backend instead of direct provider requests, run `python server.py` and update `window.PRA_SUSH_BACKEND_URL` in `docs/js/default-config.js` to the backend address.
+4. Open the generated GitHub Pages URL.
 
 ### Notes
 

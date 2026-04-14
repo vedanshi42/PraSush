@@ -36,6 +36,7 @@ const defaultConfig = {
   endpoint: window.PRA_SUSH_DEFAULT_ENDPOINT || ProviderClient.defaultEndpoint("nvidia"),
   model: window.PRA_SUSH_DEFAULT_MODEL || ProviderClient.defaultModel("nvidia"),
   apiKey: window.PRA_SUSH_DEFAULT_API_KEY || "",
+  backendUrl: window.PRA_SUSH_BACKEND_URL || null,
 };
 
 let client = null;
@@ -199,7 +200,7 @@ async function sendChat(message, imageData = null) {
     return;
   }
 
-  if (!client) {
+  if (!client && !defaultConfig.backendUrl) {
     setStatus("Provider client is not initialized.", true);
     return;
   }
@@ -209,7 +210,9 @@ async function sendChat(message, imageData = null) {
   disableChatControls();
 
   try {
-    const response = await client.chat(message, imageData);
+    const response = defaultConfig.backendUrl
+      ? await backendChat(message, imageData)
+      : await client.chat(message, imageData);
     responseOutput.textContent = response;
     setAvatar(response, "Response received.");
     setStatus("Success.");
@@ -221,6 +224,39 @@ async function sendChat(message, imageData = null) {
     setStatus(`Error encountered - ${message}`, true);
     disableChatControls();
   }
+}
+
+async function backendChat(message, imageData = null) {
+  const payload = {
+    query: message,
+    image_data: imageData || null,
+    custom: currentMode === "custom",
+    provider_settings: currentMode === "custom" ? {
+      endpoint: endpointInput.value.trim(),
+      model: modelInput.value.trim(),
+      api_key: apiKeyInput.value.trim(),
+    } : null,
+  };
+
+  const response = await fetch(`${defaultConfig.backendUrl.replace(/\/+$/, "")}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Backend request failed ${response.status}: ${details}`);
+  }
+
+  const result = await response.json();
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  return result.response;
 }
 
 async function sendQuery() {

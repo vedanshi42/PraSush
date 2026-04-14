@@ -1,3 +1,5 @@
+Flask
+Flask-Cors
 opencv-python
 pygame
 pyttsx3
