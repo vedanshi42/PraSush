@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PraSush Web UI</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PraSush Web UI</h1>
+      <p>Choose a mode, then chat with the avatar using default NVIDIA settings or your own provider.</p>
+    </header>
+
+    <section id="mode-selection" class="panel">
+      <h2>Start PraSush</h2>
+      <div class="options-grid">
+        <button id="default-mode-button" type="button">Use default NVIDIA provider</button>
+        <button id="custom-mode-button" type="button">Enter your own API</button>
+      </div>
+      <p class="note">Default mode uses the configured default provider settings. For public GitHub Pages, the default key must be injected securely before publishing.</p>
+      <div id="default-warning" class="note warning hidden"></div>
+    </section>
+
+    <section id="custom-settings" class="panel hidden">
+      <h2>Custom provider settings</h2>
+      <form id="custom-form">
+        <label>
+          Provider
+          <select id="provider-select">
+            <option value="openai">OpenAI-compatible</option>
+            <option value="nvidia">NVIDIA-compatible</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+
+        <label>
+          Endpoint URL
+          <input id="endpoint-input" type="url" placeholder="https://api.openai.com/v1" required />
+        </label>
+
+        <label>
+          Model
+          <input id="model-input" type="text" placeholder="gpt-4o-mini" required />
+        </label>
+
+        <label>
+          API key
+          <input id="api-key-input" type="password" placeholder="Enter your API key" autocomplete="off" required />
+        </label>
+
+        <label class="checkbox-label">
+          <input id="remember-key-checkbox" type="checkbox" />
+          Remember this key in the browser
+        </label>
+
+        <div class="actions">
+          <button type="button" id="custom-continue-button">Continue</button>
+          <button type="button" id="custom-back-button">Back</button>
+        </div>
+      </form>
+      <p class="note">The selected endpoint must support CORS for browser-based requests. If you are not sure, use the default provider settings.</p>
+    </section>
+
+    <section id="chat-screen" class="panel hidden">
+      <div class="avatar-card">
+        <div class="avatar-icon">🤖</div>
+        <div class="avatar-state" id="avatar-status">Waiting for wake word</div>
+        <div class="avatar-screen" id="avatar-screen">Say hi to start chat.</div>
+      </div>
+
+      <div class="chat-controls">
+        <label>
+          Your message
+          <textarea id="query-input" rows="4" placeholder="Type your message here..."></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" id="mic-button">Use microphone</button>
+          <button type="button" id="camera-button">Capture environment</button>
+        </div>
+        <div class="actions">
+          <button type="button" id="send-query-button">Send</button>
+          <button type="button" id="reset-button">Restart</button>
+        </div>
+        <p class="note">Say or type a vision request like "what do you see" to trigger camera access and scene capture.</p>
+      </div>
+
+      <section class="output-card">
+        <h3>Response</h3>
+        <pre id="response-output">No response yet.</pre>
+      </section>
+      <section class="status-card">
+        <h3>Status</h3>
+        <div id="status-text">Ready.</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="js/default-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
