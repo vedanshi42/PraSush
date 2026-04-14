@@ -60,6 +60,9 @@ function showSection(section) {
 function setAvatar(text, status, mode = "idle") {
   avatarScreen.textContent = text;
   avatarStatus.textContent = status;
+  if (!avatarCard) {
+    return;
+  }
   avatarCard.classList.toggle("avatar-busy", mode === "busy");
   avatarCard.classList.toggle("avatar-listening", mode === "listening");
   avatarCard.classList.toggle("avatar-speaking", mode === "speaking");
@@ -434,15 +437,56 @@ async function startVoiceRecognition() {
   }
 }
 
+function stripMarkdownForSpeech(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/~~(.*?)~~/g, "$1")
+    .replace(/\[(.*?)\]\([^\)]+\)/g, "$1")
+    .replace(/\s+\*/g, " ")
+    .replace(/\s+\#/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function detectSpeechLanguage(text) {
+  if (/[\u0900-\u097F]/.test(text)) {
+    return "hi-IN";
+  }
+  return "en-IN";
+}
+
+function summarizeForSpeech(text) {
+  const cleaned = stripMarkdownForSpeech(text);
+  if (cleaned.length <= 220) {
+    return cleaned;
+  }
+
+  const sentences = cleaned.split(/(?<=[.!?])\s+/);
+  if (sentences.length >= 2) {
+    const summary = `${sentences[0]} ${sentences[1]}`.trim();
+    return summary.length <= 220 ? summary : `${summary.slice(0, 220).trim()}...`;
+  }
+
+  return `${cleaned.slice(0, 220).trim()}...`;
+}
+
 function speakResponse(text) {
   if (!text || !window.speechSynthesis) {
     return;
   }
 
+  const spokenText = summarizeForSpeech(text);
+  const utterance = new SpeechSynthesisUtterance(stripMarkdownForSpeech(spokenText));
+  utterance.lang = detectSpeechLanguage(spokenText);
+
   try {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-IN";
+    setAvatar("Speaking...", "Speaking now.", "speaking");
+    utterance.onend = () => setAvatar(avatarScreen.textContent, avatarStatus.textContent, "idle");
     window.speechSynthesis.speak(utterance);
   } catch (err) {
     console.warn("Speech synthesis failed:", err);
