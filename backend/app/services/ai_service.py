@@ -14,12 +14,30 @@ from app.services.memory_service import memory_manager
 
 JSON_CLEAN_RE = re.compile(r"^.*?({.*}).*?$", re.DOTALL)
 
-# Detects actual Hindi/Devanagari script characters
+# Detects Devanagari script characters (actual Hindi)
 HINDI_SCRIPT_RE = re.compile(r"[\u0900-\u097F]")
+
+# Common Hinglish words/patterns (Hindi typed in Roman/Latin script)
+HINGLISH_KEYWORDS = [
+    "mujhe", "batao", "batayen", "karo", "kaise", "kya", "hai", "hain", "nahi",
+    "accha", "theek", "abhi", "bahut", "thoda", "zyada", "wala", "wali", "wale",
+    "aur", "lekin", "phir", "toh", "bhi", "sirf", "yeh", "woh", "iska", "uska",
+    "khana", "paani", "doodh", "dahi", "masala", "sabzi", "roti", "chawal",
+    "ghar", "kaam", "thodi", "jaldi", "seedha", "agar", "matlab", "samajh",
+    "hindi me", "hindi mein", "hindi main", "hinglish",
+]
 
 
 def _is_hindi(text: str) -> bool:
-    """Returns True only if the query contains Devanagari/Hindi script characters."""
+    """Returns True if the query contains Devanagari script OR common Hinglish Roman-script words."""
+    if HINDI_SCRIPT_RE.search(text):
+        return True
+    lower = text.lower()
+    return any(kw in lower for kw in HINGLISH_KEYWORDS)
+
+
+def _is_devanagari(text: str) -> bool:
+    """Returns True only if the query contains actual Devanagari/Hindi script characters."""
     return bool(HINDI_SCRIPT_RE.search(text))
 
 
@@ -84,12 +102,36 @@ def call_reasoning_model(
     print(f"\n[AI LOG] 🧠 Reasoning — model: {NVIDIA_TEXT_MODEL}")
 
     use_hindi = _is_hindi(query)
-    print(f"[AI LOG] 🌐 Language: {'Hindi detected' if use_hindi else 'English'}")
+    is_devanagari = _is_devanagari(query)
+    if is_devanagari:
+        lang_label = "Hindi (Devanagari script)"
+    elif use_hindi:
+        lang_label = "Hinglish (Roman script)"
+    else:
+        lang_label = "English"
+    print(f"[AI LOG] 🌐 Language: {lang_label}")
 
     url = f"{NVIDIA_API_ENDPOINT}/chat/completions"
 
+    # Build language instruction based on detected language
+    if is_devanagari:
+        lang_instruction = (
+            "IMPORTANT: The user is writing in Hindi (Devanagari script). "
+            "You MUST respond in Hindi using Devanagari script for all text fields in the JSON."
+        )
+    elif use_hindi:
+        lang_instruction = (
+            "IMPORTANT: The user is writing in Hinglish (Hindi words typed in Roman/Latin script). "
+            "You MUST respond in Hinglish — use casual Hindi words written in Roman script "
+            "(e.g., 'Aapko yeh karna hai...' not 'You need to do...'). "
+            "Do NOT respond in pure English. Mirror the user's language style."
+        )
+    else:
+        lang_instruction = "Respond in clear, friendly English."
+
     system_prompt = (
         "You are PraSush, a warm helpful AI assistant for everyday repairs, cooking, and learning.\n"
+        f"{lang_instruction}\n"
         "Reply ONLY with a valid JSON object — no markdown, no code fences, nothing outside the JSON.\n"
         "Start directly with { and end with }.\n"
         "Required JSON keys (use exactly these names):\n"

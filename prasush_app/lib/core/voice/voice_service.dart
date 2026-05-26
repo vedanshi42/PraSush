@@ -38,10 +38,30 @@ class VoiceService extends ChangeNotifier {
       debugPrint('TTS Error: $msg');
     });
 
-    // Set warm voice settings
+    // Default voice settings (English)
     _tts.setLanguage('en-US');
     _tts.setSpeechRate(0.5); // Calm pacing
     _tts.setPitch(1.0);
+  }
+
+  /// Detects whether [text] is Hindi (Devanagari) or Hinglish (Roman-script Hindi)
+  /// and returns the appropriate BCP-47 locale tag.
+  static String detectLocale(String text) {
+    // Devanagari Unicode block → real Hindi script
+    final devanagariRe = RegExp(r'[\u0900-\u097F]');
+    if (devanagariRe.hasMatch(text)) return 'hi-IN';
+
+    // Common Hinglish Roman-script keywords
+    const hinglishKeywords = [
+      'mujhe', 'batao', 'batayen', 'karo', 'kaise', 'kya', 'hai', 'hain',
+      'nahi', 'accha', 'theek', 'bahut', 'thoda', 'zyada', 'wala', 'wali',
+      'aur', 'lekin', 'phir', 'toh', 'bhi', 'yeh', 'woh', 'khana', 'dahi',
+      'masala', 'sabzi', 'roti', 'chawal', 'aapko', 'karein', 'lijiye',
+    ];
+    final lower = text.toLowerCase();
+    if (hinglishKeywords.any((kw) => lower.contains(kw))) return 'hi-IN';
+
+    return 'en-US';
   }
 
   Future<void> _initStt() async {
@@ -64,9 +84,26 @@ class VoiceService extends ChangeNotifier {
     }
   }
 
-  Future<void> speak(String text) async {
+  /// Speaks [text] using the correct accent.
+  /// [locale] can be explicitly passed (e.g. 'hi-IN'), or auto-detected from
+  /// the text content when left null.
+  Future<void> speak(String text, {String? locale}) async {
     if (text.isEmpty) return;
     await stopSpeaking();
+
+    final targetLocale = locale ?? detectLocale(text);
+    await _tts.setLanguage(targetLocale);
+
+    // Indian accent tuning: slightly slower + natural pitch
+    if (targetLocale == 'hi-IN') {
+      await _tts.setSpeechRate(0.48);
+      await _tts.setPitch(1.05);
+    } else {
+      await _tts.setSpeechRate(0.50);
+      await _tts.setPitch(1.0);
+    }
+
+    debugPrint('[TTS] Speaking in locale: $targetLocale');
     await _tts.speak(text);
   }
 

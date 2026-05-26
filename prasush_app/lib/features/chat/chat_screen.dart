@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -55,6 +57,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   late String _sessionId;
   bool _isLoading = false;
   final List<ChatMessage> _messages = [];
+  String? _attachedImageBase64;
 
   late AnimationController _pulseController;
 
@@ -129,15 +132,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     bool showUserBubble = true,
     bool autoGreeting = false,
   }) async {
-    if (text.trim().isEmpty && imageBase64 == null) return;
+    final imageToSend = imageBase64 ?? _attachedImageBase64;
+    
+    if (text.trim().isEmpty && imageToSend == null) return;
 
     _textController.clear();
+    final currentImage = imageToSend;
+    
+    setState(() {
+      _attachedImageBase64 = null;
+    });
 
     if (showUserBubble) {
       setState(() {
         _messages.add(ChatMessage(
           text: text.trim().isNotEmpty ? text.trim() : null,
-          imageBase64: imageBase64,
+          imageBase64: currentImage,
           isUser: true,
         ));
         _isLoading = true;
@@ -156,7 +166,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final response = await apiService.sendChatRequest(
         sessionId: _sessionId,
         query: text.trim().isNotEmpty ? text.trim() : _defaultQueryForMode(),
-        imageBase64: imageBase64,
+        imageBase64: currentImage,
         userName: authState.userName,
         mode: widget.mode,
       );
@@ -172,7 +182,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _scrollToBottom();
 
       if (!autoGreeting) {
-        voiceService.speak(response.spokenResponse);
+        voiceService.speak(
+          response.spokenResponse,
+          locale: VoiceService.detectLocale(response.spokenResponse),
+        );
       }
     } catch (e) {
       setState(() {
@@ -221,7 +234,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     setState(() {
       _messages.clear();
       _isLoading = false;
+      _attachedImageBase64 = null;
     });
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _attachedImageBase64 = base64Encode(bytes);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -611,7 +646,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                               if (voiceService.isSpeaking) {
                                 voiceService.stopSpeaking();
                               } else {
-                                voiceService.speak(resp.spokenResponse);
+                                voiceService.speak(
+                                  resp.spokenResponse,
+                                  locale: VoiceService.detectLocale(resp.spokenResponse),
+                                );
                               }
                             },
                             child: Container(
@@ -862,80 +900,165 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Mic button
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: voiceService.isListening
-                  ? AppTheme.errorRed.withValues(alpha: 0.1)
-                  : AppTheme.sagePrimary.withValues(alpha: 0.08),
-            ),
-            child: IconButton(
-              icon: Icon(
-                voiceService.isListening
-                    ? Icons.mic_off_rounded
-                    : Icons.mic_rounded,
-                color: voiceService.isListening
-                    ? AppTheme.errorRed
-                    : AppTheme.sagePrimary,
-                size: 22,
-              ),
-              onPressed: _triggerVoiceInput,
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Text field
-          Expanded(
-            child: TextField(
-              controller: _textController,
-              style: GoogleFonts.inter(fontSize: 14),
-              minLines: 1,
-              maxLines: 4,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                hintText: voiceService.isListening
-                    ? 'Listening...'
-                    : 'Ask PraSush anything...',
-                hintStyle: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: isDark ? Colors.white38 : Colors.black38,
+          // Image Preview Attachment
+          if (_attachedImageBase64 != null) ...[
+            Stack(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.sagePrimary.withValues(alpha: 0.2),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      base64Decode(_attachedImageBase64!),
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
-                filled: true,
-                fillColor: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.03),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+                Positioned(
+                  top: -8,
+                  right: -8,
+                  child: IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.errorRed,
+                      ),
+                      child: const Icon(Icons.close, size: 16, color: Colors.white),
+                    ),
+                    onPressed: () => setState(() => _attachedImageBase64 = null),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          Row(
+            children: [
+              // Add Image Button
+              IconButton(
+                icon: Icon(
+                  Icons.add_photo_alternate_rounded,
+                  color: AppTheme.sagePrimary.withValues(alpha: 0.8),
+                  size: 24,
+                ),
+                onPressed: () {
+                  // Show bottom sheet to choose camera or gallery
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: isDark ? AppTheme.darkCard : Colors.white,
+                    builder: (context) => SafeArea(
+                      child: Wrap(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.photo_library, color: AppTheme.sagePrimary),
+                            title: const Text('Gallery'),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _pickImage(ImageSource.gallery);
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.camera_alt, color: AppTheme.sagePrimary),
+                            title: const Text('Camera'),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _pickImage(ImageSource.camera);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+
+              // Mic button
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: voiceService.isListening
+                      ? AppTheme.errorRed.withValues(alpha: 0.1)
+                      : AppTheme.sagePrimary.withValues(alpha: 0.08),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    voiceService.isListening
+                        ? Icons.mic_off_rounded
+                        : Icons.mic_rounded,
+                    color: voiceService.isListening
+                        ? AppTheme.errorRed
+                        : AppTheme.sagePrimary,
+                    size: 22,
+                  ),
+                  onPressed: _triggerVoiceInput,
                 ),
               ),
-              onSubmitted: (text) => _sendMessage(text),
-            ),
-          ),
-          const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-          // Send button
-          GestureDetector(
-            onTap: () => _sendMessage(_textController.text),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.sagePrimary,
+              // Text field
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  minLines: 1,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: voiceService.isListening
+                        ? 'Listening...'
+                        : 'Ask PraSush anything...',
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.03),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (text) => _sendMessage(text),
+                ),
               ),
-              child: const Icon(
-                Icons.send_rounded,
-                color: Colors.white,
-                size: 20,
+              const SizedBox(width: 8),
+
+              // Send button
+              GestureDetector(
+                onTap: () => _sendMessage(_textController.text),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.sagePrimary,
+                  ),
+                  child: const Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
