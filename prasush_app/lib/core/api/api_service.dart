@@ -50,7 +50,7 @@ class GuidanceResponse {
 
 class ApiService {
   static const String _baseUrlKey = 'backend_base_url';
-  static const String defaultBaseUrl = 'http://10.0.2.2:8000'; // Default for Android Emulator
+  static const String defaultBaseUrl = 'https://prasush-production.up.railway.app';
 
   Future<String> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
