@@ -50,11 +50,11 @@ dependencies:
 
   # Audio & Voice Interaction
   flutter_tts: ^4.0.2
-  speech_to_text: ^6.6.1
+  speech_to_text: ^7.4.0
 
   # Authentication
-  firebase_core: ^2.32.0
-  firebase_auth: ^4.20.0
+  firebase_core: ^4.9.0
+  firebase_auth: ^6.5.1
   google_sign_in: ^6.2.1
 
 dev_dependencies:

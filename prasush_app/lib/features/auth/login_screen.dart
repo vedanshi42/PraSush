@@ -13,7 +13,6 @@ class LoginScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Listen to authentication state to route to home
     ref.listen<AuthState>(authProvider, (previous, next) {
       if (next.isAuthenticated) {
         context.go('/home');
@@ -34,14 +33,15 @@ class LoginScreen extends ConsumerWidget {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 16.0),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Spacer(flex: 2),
+                const SizedBox(height: 32),
 
-                // Top Logo icon
+                // Logo icon
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -49,8 +49,8 @@ class LoginScreen extends ConsumerWidget {
                     color: isDark ? AppTheme.darkCard : Colors.white,
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.sagePrimary.withValues(alpha: 0.08),
-                        blurRadius: 20,
+                        color: AppTheme.sagePrimary.withValues(alpha: 0.12),
+                        blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
                     ],
@@ -63,59 +63,59 @@ class LoginScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // Greeting & Title
+                // Title
                 Text(
                   'Welcome to PraSush',
                   style: GoogleFonts.outfit(
-                    fontSize: 34,
+                    fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: isDark ? Colors.white : AppTheme.deepSlate,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
-                // Supportive Tagline / Purpose
+                // Tagline
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   child: Text(
-                    'An AI that helps you feel less helpless in everyday real-world situations.',
+                    'An AI that helps you feel less helpless\nin everyday real-world situations.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
-                      fontSize: 16,
-                      height: 1.5,
+                      fontSize: 15,
+                      height: 1.55,
                       fontWeight: FontWeight.w400,
                       color: isDark
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : AppTheme.deepSlate.withValues(alpha: 0.7),
+                          ? Colors.white.withValues(alpha: 0.65)
+                          : AppTheme.deepSlate.withValues(alpha: 0.65),
                     ),
                   ),
                 ),
-                const Spacer(flex: 3),
+                const SizedBox(height: 36),
 
-                // Features Carousel-like List
+                // Feature cards
                 _buildFeatureItem(
                   context,
                   icon: Icons.plumbing_rounded,
                   title: 'Everyday Repairs & Hazards',
                   subtitle: 'Step-by-step visuals and professional routing.',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 _buildFeatureItem(
                   context,
                   icon: Icons.soup_kitchen_rounded,
                   title: 'Interactive Kitchen Aid',
                   subtitle: 'Culinary rescue tips and safe baking instructions.',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 _buildFeatureItem(
                   context,
                   icon: Icons.psychology_alt_rounded,
                   title: 'Warm & Bilingual Guidance',
                   subtitle: 'Chat naturally in English, Hindi, or Hinglish.',
                 ),
+                const SizedBox(height: 40),
 
-                const Spacer(flex: 4),
-
+                // Error message
                 if (authState.errorMessage != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
@@ -126,10 +126,10 @@ class LoginScreen extends ConsumerWidget {
                     ),
                   ),
 
-                // Google Sign-In Button
+                // Google Sign-In button
                 SizedBox(
                   width: double.infinity,
-                  height: 58,
+                  height: 56,
                   child: ElevatedButton(
                     onPressed: authState.isLoading
                         ? null
@@ -141,7 +141,7 @@ class LoginScreen extends ConsumerWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                         side: BorderSide(
-                          color: AppTheme.sagePrimary.withValues(alpha: 0.12),
+                          color: AppTheme.sagePrimary.withValues(alpha: 0.2),
                           width: 1.5,
                         ),
                       ),
@@ -155,11 +155,10 @@ class LoginScreen extends ConsumerWidget {
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Mock Google Logo icon with simple clean shapes
                               Icon(
                                 Icons.login_rounded,
                                 color: AppTheme.sagePrimary.withValues(alpha: 0.8),
-                                size: 24,
+                                size: 22,
                               ),
                               const SizedBox(width: 14),
                               Text(
@@ -173,12 +172,12 @@ class LoginScreen extends ConsumerWidget {
                           ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Sandbox Mode Fallback
+                // Sandbox Demo Mode button
                 SizedBox(
                   width: double.infinity,
-                  height: 58,
+                  height: 56,
                   child: OutlinedButton(
                     onPressed: authState.isLoading
                         ? null
@@ -189,7 +188,7 @@ class LoginScreen extends ConsumerWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.sagePrimary,
                       side: BorderSide(
-                        color: AppTheme.sagePrimary.withValues(alpha: 0.3),
+                        color: AppTheme.sagePrimary.withValues(alpha: 0.4),
                         width: 1.5,
                       ),
                       shape: RoundedRectangleBorder(
@@ -202,7 +201,7 @@ class LoginScreen extends ConsumerWidget {
                         const Icon(Icons.explore_rounded, size: 20),
                         const SizedBox(width: 12),
                         Text(
-                          'Sandbox Demo Mode',
+                          'Try Sandbox Demo Mode',
                           style: GoogleFonts.outfit(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -212,16 +211,17 @@ class LoginScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+
                 Text(
-                  'No Firebase configuration? Tap Sandbox Mode to preview immediately.',
+                  'No Firebase setup? Tap Sandbox Mode to preview instantly.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
                 ),
-                const Spacer(flex: 1),
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -241,9 +241,11 @@ class LoginScreen extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.04) : AppTheme.sagePrimary.withValues(alpha: 0.06),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.04)
+              : AppTheme.sagePrimary.withValues(alpha: 0.08),
           width: 1.5,
         ),
       ),
@@ -253,9 +255,9 @@ class LoginScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppTheme.sagePrimary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppTheme.sagePrimary, size: 24),
+            child: Icon(icon, color: AppTheme.sagePrimary, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -265,16 +267,16 @@ class LoginScreen extends ConsumerWidget {
                 Text(
                   title,
                   style: GoogleFonts.outfit(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : AppTheme.deepSlate,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   subtitle,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 12,
                     color: isDark ? Colors.white38 : Colors.black45,
                   ),
                 ),

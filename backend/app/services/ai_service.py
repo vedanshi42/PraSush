@@ -14,30 +14,39 @@ from app.services.memory_service import memory_manager
 
 JSON_CLEAN_RE = re.compile(r"^.*?({.*}).*?$", re.DOTALL)
 
+# Detects actual Hindi/Devanagari script characters
+HINDI_SCRIPT_RE = re.compile(r"[\u0900-\u097F]")
+
+
+def _is_hindi(text: str) -> bool:
+    """Returns True only if the query contains Devanagari/Hindi script characters."""
+    return bool(HINDI_SCRIPT_RE.search(text))
+
+
 def _get_headers() -> Dict[str, str]:
     return {
         "Authorization": f"Bearer {NVIDIA_API_KEY}",
         "Content-Type": "application/json"
     }
 
+
 def call_vision_model(image_base64: str, user_query: str) -> str:
     """
-    Calls NVIDIA Vision NIM Model (Phi-4 Multimodal) to get a scene/object description.
+    Calls NVIDIA Vision NIM Model to describe an image in the context of the user query.
+    Falls back gracefully if the model times out or is unavailable.
     """
+    print(f"\n[AI LOG] 📷 Vision analysis — model: {NVIDIA_VISION_MODEL}")
+    print(f"[AI LOG] 💬 User query: '{user_query}'")
+
     url = f"{NVIDIA_API_ENDPOINT}/chat/completions"
     prompt = (
-        f"Analyze this image in detail. The user is asking: '{user_query}'. "
-        "Describe what you see, focusing on any physical wear, appliance issues, "
-        "cooking ingredients, damage, or contextual details that will help in troubleshooting."
+        f"Analyze this image. The user asks: '{user_query}'. "
+        "Describe visible damage, appliance state, ingredients, or hazards briefly in 2-3 sentences."
     )
-    
+
     payload = {
         "model": NVIDIA_VISION_MODEL,
         "messages": [
-            {
-                "role": "system",
-                "content": "You are PraSush, a bilingual visual assistant. Answer visual queries thoroughly."
-            },
             {
                 "role": "user",
                 "content": [
@@ -47,61 +56,57 @@ def call_vision_model(image_base64: str, user_query: str) -> str:
             }
         ],
         "temperature": 0.3,
-        "max_tokens": 500
+        "max_tokens": 200
     }
-    
+
     try:
-        response = requests.post(url, headers=_get_headers(), json=payload, timeout=60)
+        response = requests.post(url, headers=_get_headers(), json=payload, timeout=20)
         response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        description = response.json()["choices"][0]["message"]["content"].strip()
+        print(f"[AI LOG] ✅ Vision result: '{description[:120]}...'")
+        return description
     except Exception as e:
-        print(f"Error calling NVIDIA Vision model: {e}")
+        print(f"[AI LOG] ❌ Vision model failed: {e}")
         raise RuntimeError(f"Vision analysis failed: {str(e)}")
 
+
 def call_reasoning_model(
-    query: str, 
-    mode: str, 
-    image_description: Optional[str], 
+    query: str,
+    mode: str,
+    image_description: Optional[str],
     history_context: str,
     user_name: Optional[str]
 ) -> GuidanceResponse:
     """
-    Calls NVIDIA Reasoning NIM Model (Llama 3.1) to generate structured guidance.
+    Calls the NVIDIA reasoning model to generate structured JSON guidance.
+    Falls back to sandbox response if the model is unavailable.
     """
+    print(f"\n[AI LOG] 🧠 Reasoning — model: {NVIDIA_TEXT_MODEL}")
+
+    use_hindi = _is_hindi(query)
+    print(f"[AI LOG] 🌐 Language: {'Hindi detected' if use_hindi else 'English'}")
+
     url = f"{NVIDIA_API_ENDPOINT}/chat/completions"
-    
+
     system_prompt = (
-        "You are PraSush, a warm, intelligent, trustworthy, and empathetic AI guidance assistant. "
-        "Your mission is to help ordinary people (families, elderly, students) feel less helpless "
-        "in everyday situations (repair, cooking, visual learning, and general assistance).\n\n"
-        "You MUST respond in a highly structured, valid JSON format. "
-        "Do NOT enclose your response in markdown code blocks like ```json ... ```. "
-        "Start directly with the '{' character and end with '}'.\n\n"
-        "The JSON object must contain EXACTLY the following keys:\n"
-        "{\n"
-        '  "probable_issue": "A simple diagnostic title/label. Keep it brief and friendly.",\n'
-        '  "explanation": "A warm, comforting, easy-to-understand visual and logical explanation. Explain like a wise, supportive family member or neighbor.",\n'
-        '  "is_dangerous": true/false (Set to true ONLY if this represents high risk like high-voltage electrical panels, gas leaks, extreme heat, toxic chemicals, or major structural failure),\n'
-        '  "safety_warning": "If is_dangerous is true, write a strong, urgent, but caring warning advising the user to stand back and call a professional technician. If false, give practical safety tips (e.g. unplug the appliance first).",\n'
-        '  "next_steps": ["Step 1...", "Step 2...", "Step 3..."] (Clean step-by-step checklist of actionable instructions. Include 3 to 6 steps),\n'
-        '  "spoken_response": "A comforting verbal summary for text-to-speech. Do not mention JSON keys or say robotic phrases."\n'
-        "}\n\n"
-        "Language instruction: If the user query or history is in Hindi or Hinglish, answer "
-        "the 'explanation', 'probable_issue', and 'spoken_response' in natural, warm Hindi (Devanagari script) or Hindi-English mix "
-        "so they feel comfortable, but maintain valid JSON."
+        "You are PraSush, a warm helpful AI assistant for everyday repairs, cooking, and learning.\n"
+        "Reply ONLY with a valid JSON object — no markdown, no code fences, nothing outside the JSON.\n"
+        "Start directly with { and end with }.\n"
+        "Required JSON keys (use exactly these names):\n"
+        "  probable_issue  — short friendly title (string)\n"
+        "  explanation     — warm 2-3 sentence description (string)\n"
+        "  is_dangerous    — true or false (boolean)\n"
+        "  safety_warning  — safety note string, or null\n"
+        "  next_steps      — array of 4-6 clear action strings; for cooking include exact ingredient quantities\n"
+        "  spoken_response — 1-2 sentence TTS-friendly summary (string)\n"
     )
-    
-    user_content = (
-        f"User Name: {user_name or 'Friend'}\n"
-        f"Flow Mode: {mode}\n"
-        f"Current Query: {query}\n"
-        f"Conversation History:\n{history_context}\n"
-    )
-    
+
+    user_content = f"Mode: {mode}\nUser: {user_name or 'Friend'}\nQuery: {query}"
+    if history_context and history_context.strip():
+        user_content += f"\nHistory: {history_context[:300]}"
     if image_description:
-        user_content += f"\nVisual analysis of what the camera sees: {image_description}"
-        
+        user_content += f"\nCamera sees: {image_description}"
+
     payload = {
         "model": NVIDIA_TEXT_MODEL,
         "messages": [
@@ -109,110 +114,201 @@ def call_reasoning_model(
             {"role": "user", "content": user_content}
         ],
         "temperature": 0.4,
-        "max_tokens": 800
+        "max_tokens": 700
     }
-    
+
     try:
-        response = requests.post(url, headers=_get_headers(), json=payload, timeout=60)
+        response = requests.post(url, headers=_get_headers(), json=payload, timeout=25)
         response.raise_for_status()
         raw_content = response.json()["choices"][0]["message"]["content"].strip()
-        
-        # Clean up any potential markdown wraps
-        cleaned_json = raw_content
+        print(f"[AI LOG] 📝 Raw output:\n{raw_content}\n")
+
+        # Strip markdown code fences if present
+        raw_content = re.sub(r"^```(?:json)?\s*", "", raw_content, flags=re.IGNORECASE)
+        raw_content = re.sub(r"\s*```\s*$", "", raw_content).strip()
+
         match = JSON_CLEAN_RE.match(raw_content)
-        if match:
-            cleaned_json = match.group(1)
-            
+        cleaned_json = match.group(1) if match else raw_content
+
         parsed_data = json.loads(cleaned_json)
+        print(f"[AI LOG] ✅ Parsed: {parsed_data.get('probable_issue')}")
         return GuidanceResponse(**parsed_data)
+
     except Exception as e:
-        print(f"Error calling NVIDIA Reasoning model or parsing JSON: {e}")
-        # Fall back to sandbox generation as high-fidelity recovery
+        print(f"[AI LOG] ⚠️ Reasoning error: {e} — using sandbox fallback")
         return get_sandbox_response(query, mode, image_description is not None, user_name)
 
-def get_sandbox_response(query: str, mode: str, has_image: bool, user_name: Optional[str]) -> GuidanceResponse:
+
+def get_sandbox_response(
+    query: str,
+    mode: str,
+    has_image: bool,
+    user_name: Optional[str]
+) -> GuidanceResponse:
     """
-    Rich simulated guidance sandbox. Matches query keywords to generate empathetic solutions.
+    Rich offline sandbox. Matches query keywords to return empathetic, structured responses.
+    This is the guaranteed delivery path when AI models are unavailable.
     """
     name = user_name or "Friend"
     q = query.lower()
-    
-    # Check for DANGEROUS scenario
-    if any(k in q for k in ["spark", "shock", "wire", "voltage", "electric panel", "exposed", "gas leak", "smell gas", "circuit breaker", "breaker box"]):
+
+    # --- Dangerous electrical / gas hazard ---
+    if any(k in q for k in ["spark", "shock", "wire", "voltage", "exposed", "gas leak",
+                              "smell gas", "circuit breaker", "breaker box", "electric panel"]):
         return GuidanceResponse(
-            probable_issue="Dangerous Electrical/Gas Hazard Detected ⚡",
-            explanation=f"Hello {name}. I can see there are exposed wires, sparks, or potential gas leaks in this area. These situations are very hazardous and can lead to electrical shocks, fires, or gas accidents. Please do not touch or attempt to repair this yourself.",
+            probable_issue="⚡ Dangerous Electrical / Gas Hazard",
+            explanation=(
+                f"Hello {name}. I can detect exposed wires, sparks, or a potential gas situation here. "
+                "These are serious hazards — please do not touch or attempt any DIY repair. "
+                "Your safety comes first, always."
+            ),
             is_dangerous=True,
-            safety_warning="⚠️ URGENT SAFETY HAZARD: Do not attempt any DIY repair. Unexposed wires and sparks are highly dangerous. Please stand back and immediately contact a licensed electrician or professional technician.",
+            safety_warning=(
+                "URGENT: Step away from the area immediately. Turn off the main circuit breaker or gas valve "
+                "if it is safe to do so, then call a licensed electrician or your emergency utility helpline."
+            ),
             next_steps=[
-                "Immediately walk away from the affected area.",
-                "If safe, turn off the main circuit breaker or the gas shut-off valve from a distance.",
-                "Do not turn on any light switches or appliances that could create a spark.",
-                "Call a professional technician or your emergency utility helpline.",
-                "Keep children and pets away from the area until it is fully resolved."
+                "Walk away from the hazard area right now.",
+                "If safe, switch off the main circuit breaker or gas shut-off valve.",
+                "Do not flip any switches or use anything that could create a spark.",
+                "Call a licensed electrician or emergency services immediately.",
+                "Keep all children and pets at a safe distance until resolved.",
             ],
-            spoken_response="I've detected a potentially dangerous electrical or gas hazard here. Please step away and do not attempt to fix this yourself. I strongly recommend calling a professional technician right away for your safety."
-        )
-        
-    # Standard Appliance Troubleshooting
-    if any(k in q for k in ["toaster", "iron", "oven", "fridge", "refrigerator", "microwave", "ac", "air conditioner", "fan", "washing machine", "bulb", "light"]):
-        return GuidanceResponse(
-            probable_issue="Appliance Failure or Power Disconnection 🔌",
-            explanation=f"Don't worry, {name}. Many appliance issues are caused by loose power cords, blown thermal fuses, or simple connection blocks. Let's inspect it together step-by-step to see if it's a quick, safe fix.",
-            is_dangerous=False,
-            safety_warning="Safety First: Always unplug the appliance from the electrical socket before inspecting any plugs or panels.",
-            next_steps=[
-                "Unplug the appliance fully from the wall socket.",
-                "Check the power cord for any visible cuts, burns, or damage.",
-                "Verify if other devices work in the same wall outlet to ensure the socket is working.",
-                "Look for a reset button on the back or bottom of the appliance (common on microwaves and high-power devices).",
-                "Ensure the appliance has had time to cool down if it was running continuously (overheat protection)."
-            ],
-            spoken_response="Let's take a look at your appliance together. First, please unplug it from the wall outlet for safety. We'll start by checking the power cable and the outlet itself."
+            spoken_response=(
+                f"I've detected a potentially dangerous hazard, {name}. "
+                "Please step away and call a professional right away."
+            )
         )
 
-    # Cooking guide flow
-    if mode == "cook" or any(k in q for k in ["cook", "recipe", "paneer", "rice", "salt", "burn", "vegetable", "tea", "chai", "dinner", "lunch"]):
+    # --- Wiring / cooler / appliance repair ---
+    if any(k in q for k in ["cooler", "wiring", "repair", "toaster", "iron", "oven",
+                              "fridge", "refrigerator", "microwave", "ac", "air conditioner",
+                              "fan", "washing machine", "bulb", "light", "motor", "appliance"]):
+        is_cooler = "cooler" in q
         return GuidanceResponse(
-            probable_issue="Culinary Guidance & Quick Fixes 🍳",
-            explanation=f"A warm kitchen is the heart of a home, {name}! If you are trying to make a dish or fix a recipe (like something being too salty, burnt, or undercooked), we can easily correct it. Kitchen mistakes are just steps toward a great meal.",
+            probable_issue="🔌 Appliance / Wiring Troubleshooting",
+            explanation=(
+                f"Don't worry, {name}. "
+                + ("Cooler wiring issues are usually caused by loose connections, a faulty capacitor, or a worn pump. "
+                   if is_cooler else
+                   "Many appliance issues are caused by loose connections, blown fuses, or worn parts. ")
+                + "Let's diagnose it safely, step by step."
+            ),
             is_dangerous=False,
-            safety_warning="Take care when working around hot stoves, steaming pots, and sharp knives.",
+            safety_warning="Always unplug the appliance or switch off the circuit breaker before touching any internal wiring.",
             next_steps=[
-                "If a dish is too salty, add a peeled, raw potato or a splash of water/cream to absorb excess salt.",
-                "If something is slightly burnt, transfer the unburnt portion to a new pot immediately without scraping the bottom.",
-                "If vegetables or rice are undercooked, splash a tablespoon of warm water over them, cover tightly with a lid, and let steam on low heat.",
-                "Keep a clean bowl of cold water nearby for easy kitchen cleanup or minor burns."
+                "Switch off and unplug the appliance completely from the power source.",
+                "Inspect the power cord for any visible cuts, burns, or fraying.",
+                "Check if the wall socket works by testing another device in it.",
+                *(
+                    [
+                        "Open the cooler back panel and check the pump motor wires — reconnect any loose terminal.",
+                        "Check the capacitor (grey cylinder near the motor) for bulging or burn marks — replace if damaged.",
+                        "Reconnect all terminals securely, replace the panel, then plug in and test.",
+                    ] if is_cooler else [
+                        "Check for a blown internal fuse — replace with the same rated fuse.",
+                        "If wiring looks damaged or burnt, do not attempt repair — contact a qualified technician.",
+                        "Clean dust from vents and test the appliance again after reassembling.",
+                    ]
+                ),
             ],
-            spoken_response="Kitchen situations are always fixable! Whether you need to rescue a dish that's a bit too salty or check a cooking step, let's work through it step-by-step."
+            spoken_response=(
+                f"Let's look at this together, {name}. "
+                "First unplug the appliance, then we'll check the wiring and connections step by step."
+            )
         )
 
-    # Visual learning flow
-    if mode == "learn" or any(k in q for k in ["what is", "learn", "how does", "explain", "plant", "leaf", "tool", "gadget"]):
+    # --- Paneer salad specifically ---
+    if any(k in q for k in ["paneer salad", "veg paneer salad", "paneer"]) and mode == "cook":
         return GuidanceResponse(
-            probable_issue="Visual Discovery & Education 🔍",
-            explanation=f"What a fascinating curiosity, {name}! Let's explore how this item works, what its structure represents, and what interesting historical or practical aspects are associated with it.",
+            probable_issue="🥗 Veg Paneer Salad Recipe",
+            explanation=(
+                f"Great choice, {name}! Veg paneer salad is refreshing, protein-rich, and comes together in under 15 minutes. "
+                "Here are the ingredients and steps to make a delicious version."
+            ),
             is_dangerous=False,
-            safety_warning="Ensure you are viewing this item in a bright, stable environment.",
+            safety_warning="Handle sharp knives carefully and use fresh paneer for the best taste.",
             next_steps=[
-                "Examine the key parts of the item (e.g., textures, labels, colors).",
-                "Look for any model numbers or natural features (like leaf patterns or screws).",
-                "Understand the primary function of this object in modern everyday life.",
-                "Explore interesting facts about how it was invented or grows."
+                "Ingredients: 200 g fresh paneer, cubed",
+                "Ingredients: 1 cup cherry tomatoes (halved) or 2 regular tomatoes, diced",
+                "Ingredients: 1 cucumber, diced · 1 capsicum, diced · ½ red onion, thinly sliced",
+                "Ingredients: Handful of lettuce or spinach leaves",
+                "Dressing: 2 tbsp lemon juice · 1 tbsp olive oil · ½ tsp chaat masala · salt & black pepper to taste",
+                "Steps: Mix all vegetables in a bowl. Add paneer cubes. Pour dressing over, toss gently. Serve fresh.",
             ],
-            spoken_response="Curiosity is wonderful! I'd love to help you understand what this item is and how it works. Let's break down its features."
+            spoken_response=(
+                f"Here's your veg paneer salad recipe, {name}! "
+                "Mix fresh paneer with tomatoes, cucumber, capsicum, and a tangy lemon dressing. Ready in 15 minutes!"
+            )
         )
 
-    # General conversation fallback
+    # --- General cooking / recipe guidance ---
+    if mode == "cook" or any(k in q for k in ["cook", "recipe", "rice", "salt", "burn",
+                                                "vegetable", "tea", "chai", "dinner",
+                                                "lunch", "khana", "ingredient"]):
+        return GuidanceResponse(
+            probable_issue="🍳 Cooking Guidance",
+            explanation=(
+                f"Happy to help in the kitchen, {name}! "
+                "Whether you're rescuing a salty dish, following a recipe, or improvising — I'll guide you calmly."
+            ),
+            is_dangerous=False,
+            safety_warning="Stay careful around hot stoves, steaming pots, and sharp knives. Always use oven mitts.",
+            next_steps=[
+                "If dish is too salty: add a peeled raw potato and simmer 10 min, or add a splash of cream.",
+                "If something is slightly burnt: transfer the unburnt portion to a fresh pot immediately.",
+                "If undercooked: add 1–2 tbsp warm water, cover with a lid, and steam on low heat for 5–8 min.",
+                "To enhance flavour: finish with fresh lemon juice, coriander, or a knob of butter.",
+                "Keep a bowl of cold water nearby in case of minor burns.",
+            ],
+            spoken_response=(
+                f"Kitchen situations are always fixable, {name}! "
+                "Let me guide you step by step to rescue your dish or complete your recipe."
+            )
+        )
+
+    # --- Visual learning ---
+    if mode == "learn" or any(k in q for k in ["what is", "learn", "how does", "explain",
+                                                 "plant", "leaf", "tool", "gadget", "identify"]):
+        return GuidanceResponse(
+            probable_issue="🔍 Visual Discovery & Learning",
+            explanation=(
+                f"Great question, {name}! Let's explore what this item is, how it works, "
+                "and any interesting facts about it."
+            ),
+            is_dangerous=False,
+            safety_warning="Ensure you're viewing the item in a bright, stable environment.",
+            next_steps=[
+                "Look at the key parts — textures, colours, labels, and size.",
+                "Check for any model numbers, natural identifiers (leaf shapes, screws), or brand markings.",
+                "Understand the primary function of this object in everyday life.",
+                "Consider how it was made or how it grows — what's its origin?",
+                "Look for any safety markings or care instructions on the item.",
+            ],
+            spoken_response=(
+                f"Curiosity is wonderful, {name}! "
+                "I'd love to help you understand what this is and how it works."
+            )
+        )
+
+    # --- General fallback ---
     return GuidanceResponse(
-        probable_issue="PraSush General Assistance 🧠",
-        explanation=f"Hello {name}! I am PraSush, your visual guidance companion. I am here to help you feel less helpless in everyday tasks. Feel free to show me something with your camera or ask any question about repairs, cooking, or general troubleshooting.",
+        probable_issue="🧠 PraSush AI Assistant",
+        explanation=(
+            f"Hello {name}! I'm PraSush — your visual guidance companion. "
+            "I can help you with everyday repairs, cooking tips, and learning about the world around you. "
+            "What would you like to explore today?"
+        ),
         is_dangerous=False,
-        safety_warning="Always remember to work in well-lit areas and take your time.",
+        safety_warning=None,
         next_steps=[
-            "Click on 'Repair Help' or 'Learn Visually' to capture an image.",
-            "Ask me anything by typing or using the microphone button.",
-            "I will guide you step-by-step and read the instructions to you!"
+            "Tap 'Repair Help' to troubleshoot home appliances step by step.",
+            "Tap 'Cooking Guide' for kitchen rescue tips and recipes.",
+            "Tap 'Ask PraSush' to type or speak any question.",
+            "Tap 'Learn Visually' to scan and identify objects around you.",
         ],
-        spoken_response="Hello! I am PraSush. I'm here to help you troubleshoot, cook, or learn about anything in your environment. Let me know what we are doing today!"
+        spoken_response=(
+            f"Hello {name}! I'm PraSush, ready to help you troubleshoot, cook, or learn. "
+            "What would you like to do today?"
+        )
     )

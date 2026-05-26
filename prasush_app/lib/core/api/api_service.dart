@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -110,7 +111,7 @@ class ApiService {
         throw Exception('Server returned status: ${response.statusCode}');
       }
     } catch (e) {
-      print('API Error: $e');
+      debugPrint('API Error: $e');
       return GuidanceResponse.fallback(query, mode);
     }
   }
@@ -125,7 +126,7 @@ class ApiService {
         body: jsonEncode({'session_id': sessionId}),
       ).timeout(const Duration(seconds: 5));
     } catch (e) {
-      print('Failed to clear memory: $e');
+      debugPrint('Failed to clear memory: $e');
     }
   }
 }

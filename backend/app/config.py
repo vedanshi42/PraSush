@@ -9,7 +9,7 @@ load_dotenv(dotenv_path=env_path)
 
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 NVIDIA_API_ENDPOINT = "https://integrate.api.nvidia.com/v1"
-NVIDIA_TEXT_MODEL = os.getenv("NVIDIA_TEXT_MODEL", "nvidia/llama-3.1-nemotron-ultra-253b-v1")
+NVIDIA_TEXT_MODEL = os.getenv("NVIDIA_TEXT_MODEL", "google/gemma-3n-e2b-it")
 NVIDIA_VISION_MODEL = os.getenv("NVIDIA_VISION_MODEL", "microsoft/phi-4-multimodal-instruct")
 
 FIREBASE_CONFIG = os.getenv("FIREBASE_CONFIG", "").strip()

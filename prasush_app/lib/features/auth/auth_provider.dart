@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -44,8 +45,21 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  FirebaseAuth? get _auth {
+    try {
+      return FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  GoogleSignIn? get _googleSignIn {
+    try {
+      return GoogleSignIn();
+    } catch (_) {
+      return null;
+    }
+  }
 
   AuthNotifier() : super(AuthState(isLoading: true)) {
     _checkPersistentSession();
@@ -77,8 +91,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> signInWithGoogle() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
+      final googleSignIn = _googleSignIn;
+      if (googleSignIn == null) {
+        throw Exception('Google Sign-in is not configured or supported on this platform.');
+      }
       // Direct Firebase Google Auth flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         state = state.copyWith(isLoading: false);
         return; // Sign-in cancelled
@@ -90,7 +108,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final auth = _auth;
+      if (auth == null) {
+        throw Exception('Firebase is not initialized or supported on this platform.');
+      }
+      final UserCredential userCredential = await auth.signInWithCredential(credential);
       final User? user = userCredential.user;
 
       if (user != null) {
@@ -113,7 +135,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(isLoading: false, errorMessage: 'Firebase sign-in failed.');
       }
     } catch (e) {
-      print('Google Sign-in failed, entering high-fidelity Sandbox Demo Mode automatically: $e');
+      debugPrint('Google Sign-in failed, entering Sandbox Demo Mode: $e');
       // Gracefully fall back to Sandbox Mode to enable offline/local testing
       await signInAsSandboxUser(
         name: 'Vedanshi Dixit',
@@ -152,8 +174,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await prefs.clear();
       
       try {
-        await _auth.signOut();
-        await _googleSignIn.signOut();
+        await _auth?.signOut();
+        await _googleSignIn?.signOut();
       } catch (_) {}
 
       state = AuthState(isAuthenticated: false, isLoading: false);

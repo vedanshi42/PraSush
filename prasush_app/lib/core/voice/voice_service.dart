@@ -35,11 +35,11 @@ class VoiceService extends ChangeNotifier {
     _tts.setErrorHandler((msg) {
       _isSpeaking = false;
       notifyListeners();
-      print("TTS Error: $msg");
+      debugPrint('TTS Error: $msg');
     });
-    
+
     // Set warm voice settings
-    _tts.setLanguage("en-US");
+    _tts.setLanguage('en-US');
     _tts.setSpeechRate(0.5); // Calm pacing
     _tts.setPitch(1.0);
   }
@@ -56,11 +56,11 @@ class VoiceService extends ChangeNotifier {
         onError: (error) {
           _isListening = false;
           notifyListeners();
-          print("STT Error: $error");
+          debugPrint('STT Error: $error');
         },
       );
     } catch (e) {
-      print("Failed to init STT: $e");
+      debugPrint('Failed to init STT: $e');
     }
   }
 
@@ -93,13 +93,15 @@ class VoiceService extends ChangeNotifier {
           onResult(_lastWords);
           notifyListeners();
         },
-        listenFor: const Duration(seconds: 15),
-        pauseFor: const Duration(seconds: 4),
-        cancelOnError: true,
-        partialResults: true,
+        listenOptions: stt.SpeechListenOptions(
+          listenFor: const Duration(seconds: 15),
+          pauseFor: const Duration(seconds: 4),
+          cancelOnError: true,
+          partialResults: true,
+        ),
       );
     } else {
-      print("Speech recognition not available on this device.");
+      debugPrint('Speech recognition not available on this device.');
     }
   }
 
